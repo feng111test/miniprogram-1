@@ -1,0 +1,128 @@
+<view class="page">
+  <scroll-view scroll-y class="body">
+    <view class="section">
+      <view class="label">题库名称</view>
+      <input
+        class="input"
+        placeholder="例如：前端基础练习题库"
+        maxlength="30"
+        value="{{name}}"
+        bindinput="onNameInput"
+      />
+    </view>
+
+    <view class="section">
+      <view class="label-row">
+        <view class="label">题目内容</view>
+        <view class="counter">{{content.length}} 字</view>
+      </view>
+      <textarea
+        class="textarea"
+        placeholder="在此粘贴题库内容，支持 JSON 数组或纯文本格式"
+        value="{{content}}"
+        maxlength="-1"
+        show-confirm-bar="{{false}}"
+        bindinput="onContentInput"
+      ></textarea>
+      <view class="tools">
+        <view class="tool" bindtap="onChooseFile">选择文件</view>
+        <view class="tool" bindtap="onFillText">文本模板</view>
+        <view class="tool" bindtap="onFillJson">JSON 模板</view>
+        <view class="tool" bindtap="onClear">清空</view>
+      </view>
+    </view>
+
+    <view class="section" wx:if="{{parsed}}">
+      <view class="label-row">
+        <view class="label">解析结果</view>
+        <view class="counter" wx:if="{{parsed.count}}">共 {{parsed.count}} 题</view>
+      </view>
+
+      <view wx:if="{{parsed.count}}" class="result">
+        <view class="result-stat">
+          <view class="stat-item">
+            <view class="stat-num">{{parsed.count}}</view>
+            <view class="stat-label">题目总数</view>
+          </view>
+          <view class="stat-item">
+            <view class="stat-num">{{parsed.typeStat.single}}</view>
+            <view class="stat-label">单选题</view>
+          </view>
+          <view class="stat-item">
+            <view class="stat-num">{{parsed.typeStat.multiple}}</view>
+            <view class="stat-label">多选题</view>
+          </view>
+          <view class="stat-item">
+            <view class="stat-num">{{parsed.typeStat.judge}}</view>
+            <view class="stat-label">判断题</view>
+          </view>
+        </view>
+
+        <view class="preview" wx:for="{{parsed.preview}}" wx:key="id">
+          <view class="preview-title">
+            <text class="preview-type">{{item.typeText}}</text>
+            <text class="preview-text">{{item.index}}. {{item.title}}</text>
+          </view>
+          <view class="preview-answer">答案：{{item.answerText}}</view>
+        </view>
+      </view>
+
+      <view wx:if="{{parsed.errors.length}}" class="errors">
+        <view class="errors-title">以下 {{parsed.errors.length}} 条内容解析失败</view>
+        <view class="error-item" wx:for="{{parsed.errors}}" wx:key="index">
+          第 {{item.index}} 条：{{item.reason}}
+        </view>
+      </view>
+
+      <view wx:if="{{!parsed.count}}" class="no-result">未能识别出题目，请检查格式后重试</view>
+    </view>
+
+    <view class="section">
+      <view class="help-head" bindtap="toggleHelp">
+        <text>格式说明</text>
+        <text class="arrow">{{showHelp ? '收起' : '展开'}}</text>
+      </view>
+      <view wx:if="{{showHelp}}" class="help">
+        <view class="help-title">一、纯文本格式</view>
+        <view class="code">1.（单选）题目内容
+A. 选项一
+B. 选项二
+答案：A
+解析：这里是解析（可选）
+
+2.（多选）题目内容
+A. 选项一
+B. 选项二
+C. 选项三
+答案：AB
+
+3.（判断）题目内容
+答案：正确</view>
+        <view class="help-title">二、JSON 格式</view>
+        <view class="code">[
+  {
+    "type": "single",
+    "title": "题目内容",
+    "options": ["选项一", "选项二"],
+    "answer": "A",
+    "explanation": "解析（可选）"
+  }
+]</view>
+        <view class="help-tips">
+          <view>· type 取值：single（单选）/ multiple（多选）/ judge（判断）</view>
+          <view>· 答案支持 A、AB、A,B、1、1,2 等多种写法</view>
+          <view>· 判断题答案支持：正确 / 错误 / 对 / 错 / √ / ×</view>
+          <view>· 首行可用「# 题库名称」指定题库名</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="pad"></view>
+  </scroll-view>
+
+  <view class="footer">
+    <button class="btn-primary {{parsed.count ? '' : 'btn-disabled'}}" bindtap="onSave">
+      {{parsed.count ? '保存题库（' + parsed.count + ' 题）' : '保存题库'}}
+    </button>
+  </view>
+</view>

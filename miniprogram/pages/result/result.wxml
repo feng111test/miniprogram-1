@@ -1,0 +1,70 @@
+<view class="page">
+  <view class="header">
+    <view class="score-circle">
+      <view class="score-num">{{accuracy}}<text class="score-unit">%</text></view>
+      <view class="score-label">正确率</view>
+    </view>
+    <view class="header-info">
+      <view class="header-bank">{{bankName}}</view>
+      <view class="header-mode">{{modeText}} · 用时 {{timeText}}</view>
+    </view>
+  </view>
+
+  <view class="stat-row">
+    <view class="stat-box">
+      <view class="stat-box-num">{{total}}</view>
+      <view class="stat-box-label">总题数</view>
+    </view>
+    <view class="stat-box">
+      <view class="stat-box-num ok">{{right}}</view>
+      <view class="stat-box-label">答对</view>
+    </view>
+    <view class="stat-box">
+      <view class="stat-box-num bad">{{wrong}}</view>
+      <view class="stat-box-label">答错</view>
+    </view>
+    <view class="stat-box">
+      <view class="stat-box-num">{{unanswered}}</view>
+      <view class="stat-box-label">未答</view>
+    </view>
+  </view>
+
+  <view class="filter">
+    <view class="filter-item {{filter === 'all' ? 'on' : ''}}" data-filter="all" bindtap="onFilter">全部</view>
+    <view class="filter-item {{filter === 'wrong' ? 'on' : ''}}" data-filter="wrong" bindtap="onFilter">错题 {{wrong}}</view>
+  </view>
+
+  <scroll-view scroll-y class="body">
+    <view wx:for="{{list}}" wx:key="qid" class="item">
+      <view class="item-head">
+        <view class="item-no {{item.correct && item.answered ? 'ok' : 'bad'}}">{{item.no}}</view>
+        <view class="item-type">{{item.typeText}}</view>
+        <view class="item-status {{item.correct && item.answered ? 'ok' : 'bad'}}">
+          {{item.answered ? (item.correct ? '正确' : '错误') : '未作答'}}
+        </view>
+      </view>
+      <view class="item-title">{{item.title}}</view>
+      <view class="item-line" wx:for="{{item.options}}" wx:for-item="opt" wx:key="key">
+        <text class="opt-key {{opt.state}}">{{opt.key}}</text>
+        <text class="opt-text">{{opt.content}}</text>
+      </view>
+      <view class="item-answer">
+        <text>你的答案：{{item.selectedText}}</text>
+        <text wx:if="{{!item.correct}}">　正确答案：{{item.answerText}}</text>
+      </view>
+      <view class="item-analysis" wx:if="{{item.explanation}}">
+        <text class="analysis-label">解析：</text>
+        <text>{{item.explanation}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!list.length}}" class="empty">没有符合条件的题目</view>
+    <view class="pad"></view>
+  </scroll-view>
+
+  <view class="footer">
+    <button class="btn-plain" bindtap="onBackHome">返回首页</button>
+    <button class="btn-primary" wx:if="{{wrong > 0}}" bindtap="onRedoWrong">错题重练</button>
+    <button class="btn-primary" bindtap="onRetry">再练一次</button>
+  </view>
+</view>

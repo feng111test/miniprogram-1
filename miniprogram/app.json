@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/import/import",
+    "pages/practice/practice",
+    "pages/result/result"
+  ],
+  "window": {
+    "backgroundColor": "#F5F7FA",
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#4B6EF5",
+    "navigationBarTitleText": "刷题助手",
+    "navigationBarTextStyle": "white"
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

@@ -1,0 +1,58 @@
+<view class="page">
+  <view class="header">
+    <view class="header-top">
+      <view>
+        <view class="header-title">刷题助手</view>
+        <view class="header-sub">题库 {{summary.banks}} 个 · 题目 {{summary.total}} 道</view>
+      </view>
+      <view class="header-stat">
+        <view class="header-stat-num">{{summary.accuracy}}%</view>
+        <view class="header-stat-label">总正确率</view>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view scroll-y class="list" enable-flex>
+    <view wx:if="{{banks.length === 0}}" class="empty">
+      <view class="empty-icon">📚</view>
+      <view class="empty-title">还没有题库</view>
+      <view class="empty-desc">支持导入 JSON 或文本格式的题目，导入后即可开始刷题</view>
+      <button class="btn-primary empty-btn" bindtap="onImport">立即导入题库</button>
+      <button class="btn-ghost empty-btn" bindtap="onLoadSample">载入示例题库</button>
+    </view>
+
+    <view
+      wx:for="{{banks}}"
+      wx:key="id"
+      class="card"
+      data-id="{{item.id}}"
+      bindtap="onOpenBank"
+      bindlongpress="onMoreAction"
+    >
+      <view class="card-head">
+        <view class="card-name">{{item.name}}</view>
+        <view class="card-progress">{{item.answered}}/{{item.count}}</view>
+      </view>
+      <view class="card-desc">{{item.desc || '暂无描述'}}</view>
+      <view class="bar">
+        <view class="bar-inner" style="width: {{item.percent}}%"></view>
+      </view>
+      <view class="card-meta">
+        <text class="tag tag-single" wx:if="{{item.typeStat.single}}">单选 {{item.typeStat.single}}</text>
+        <text class="tag tag-multiple" wx:if="{{item.typeStat.multiple}}">多选 {{item.typeStat.multiple}}</text>
+        <text class="tag tag-judge" wx:if="{{item.typeStat.judge}}">判断 {{item.typeStat.judge}}</text>
+        <text class="tag tag-wrong" wx:if="{{item.wrong}}">错题 {{item.wrong}}</text>
+        <text class="tag tag-star" wx:if="{{item.star}}">收藏 {{item.star}}</text>
+      </view>
+      <view class="card-foot">
+        <text>正确率 {{item.accuracy}}%</text>
+        <text>{{item.timeText}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{banks.length}}" class="tip">长按题库卡片可重命名 / 清空记录 / 删除</view>
+    <view class="pad"></view>
+  </scroll-view>
+
+  <view class="fab" bindtap="onImport">＋</view>
+</view>

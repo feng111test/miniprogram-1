@@ -1,0 +1,110 @@
+<view class="page">
+  <view class="topbar">
+    <view class="bar">
+      <view class="bar-inner" style="width: {{percent}}%"></view>
+    </view>
+    <view class="topbar-row">
+      <view class="chip" bindtap="onQuit">退出</view>
+      <view class="topbar-center">
+        <text class="idx">{{index + 1}}</text>
+        <text class="idx-total">/ {{total}}</text>
+        <text class="timer">⏱ {{timeText}}</text>
+      </view>
+      <view class="chip" bindtap="toggleSheet">题卡</view>
+    </view>
+  </view>
+
+  <scroll-view scroll-y class="body" scroll-top="{{scrollTop}}">
+    <view class="q-card">
+      <view class="q-head">
+        <view class="q-type q-type-{{question.type}}">{{typeText}}</view>
+        <view class="star {{starred ? 'on' : ''}}" bindtap="onToggleStar">
+          {{starred ? '★ 已收藏' : '☆ 收藏'}}
+        </view>
+      </view>
+
+      <view class="q-title">{{index + 1}}. {{question.title}}</view>
+
+      <view class="opt-list">
+        <view
+          wx:for="{{options}}"
+          wx:key="key"
+          class="opt {{item.state}}"
+          data-key="{{item.key}}"
+          bindtap="onSelectOption"
+        >
+          <view class="opt-key">{{item.key}}</view>
+          <view class="opt-content">{{item.content}}</view>
+          <view class="opt-mark" wx:if="{{item.state === 'right'}}">✓</view>
+          <view class="opt-mark" wx:if="{{item.state === 'wrong'}}">✕</view>
+        </view>
+      </view>
+
+      <view wx:if="{{question.type === 'multiple' && !answered}}" class="confirm-wrap">
+        <button
+          class="btn-primary {{selected.length ? '' : 'btn-disabled'}}"
+          bindtap="onConfirmMultiple"
+        >
+          确认作答{{selected.length ? '（已选 ' + selected.length + ' 项）' : ''}}
+        </button>
+      </view>
+
+      <view wx:if="{{showResult}}" class="feedback {{correct ? 'right' : 'wrong'}}">
+        <view class="feedback-head">{{correct ? '回答正确' : '回答错误'}}</view>
+        <view class="feedback-line" wx:if="{{!correct}}">
+          正确答案：{{answerText}} {{question.answer.length > 1 ? '（多选）' : ''}}
+        </view>
+        <view class="feedback-line">
+          你的选择：{{selectedText}}
+        </view>
+      </view>
+
+      <view wx:if="{{showResult && question.explanation}}" class="analysis">
+        <view class="analysis-title">解析</view>
+        <view class="analysis-body">{{question.explanation}}</view>
+      </view>
+    </view>
+
+    <view class="pad"></view>
+  </scroll-view>
+
+  <view class="footer">
+    <button class="btn-plain" bindtap="onPrev" wx:if="{{index > 0}}">上一题</button>
+    <button
+      class="btn-primary"
+      wx:if="{{index < total - 1}}"
+      bindtap="onNext"
+    >{{answered ? '下一题' : '跳过'}}</button>
+    <button class="btn-primary" wx:else bindtap="onFinish">{{finishText}}</button>
+    <button class="btn-warn" wx:if="{{mode === 'exam' && index < total - 1}}" bindtap="onFinish">交卷</button>
+  </view>
+
+  <view wx:if="{{sheetVisible}}" class="mask" bindtap="toggleSheet">
+    <view class="sheet" catchtap="onSheetTap">
+      <view class="sheet-head">
+        <view class="sheet-title">题卡</view>
+        <view class="sheet-close" bindtap="toggleSheet">关闭</view>
+      </view>
+      <view class="sheet-legend">
+        <view class="legend"><view class="dot dot-todo"></view>未答</view>
+        <view class="legend"><view class="dot dot-right"></view>正确</view>
+        <view class="legend"><view class="dot dot-wrong"></view>错误</view>
+        <view class="legend"><view class="dot dot-done"></view>已答</view>
+      </view>
+      <view class="sheet-grid">
+        <view
+          wx:for="{{statuses}}"
+          wx:key="index"
+          class="cell {{item}} {{index === currentIndex ? 'current' : ''}}"
+          data-index="{{index}}"
+          bindtap="onJump"
+        >{{index + 1}}</view>
+      </view>
+      <view class="sheet-foot">
+        <text>已答 {{stats.answered}} / {{total}}</text>
+        <text>正确 {{stats.right}}</text>
+        <text>错误 {{stats.wrong}}</text>
+      </view>
+    </view>
+  </view>
+</view>
