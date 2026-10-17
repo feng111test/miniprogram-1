@@ -112,13 +112,33 @@ Page(shareUtil.withShare({
 
   onLoadSample: function () {
     var self = this;
+    var banks = sample.BUILT_IN_BANKS || [];
+    if (!banks.length) {
+      wx.showToast({ title: "暂无可用的内置题库", icon: "none" });
+      return;
+    }
+
+    wx.showActionSheet({
+      itemList: banks.map(function (bank) {
+        return bank.name;
+      }),
+      success: function (res) {
+        self.loadSampleBank(banks[res.tapIndex]);
+      },
+      fail: function () {},
+    });
+  },
+
+  loadSampleBank: function (bank) {
+    if (!bank) return;
+    var self = this;
     var res = null;
     var settled = false;
 
     try {
-      res = parser.parseBank(sample.SAMPLE_TEXT);
+      res = parser.parseBank(bank.content);
     } catch (e) {
-      console.error("[示例题库] 解析异常", e);
+      console.error("[内置题库] 解析异常", e);
       wx.showModal({
         title: "解析失败",
         content: String((e && e.message) || e),
@@ -128,7 +148,7 @@ Page(shareUtil.withShare({
     }
 
     if (!res || !res.questions || !res.questions.length) {
-      console.error("[示例题库] 解析结果为空", res);
+      console.error("[内置题库] 解析结果为空", bank.name, res);
       wx.showModal({
         title: "解析失败",
         content: "示例文本没有解析出题目",
@@ -137,7 +157,7 @@ Page(shareUtil.withShare({
       return;
     }
 
-    console.log("[示例题库] 开始创建，题量 =", res.questions.length);
+    console.log("[内置题库] 开始创建", bank.name, "题量 =", res.questions.length);
     wx.showLoading({ title: "保存中", mask: true });
 
     // 超时兜底：云函数长时间无响应时给出明确提示，避免「完全没反应」
@@ -155,8 +175,8 @@ Page(shareUtil.withShare({
 
     store
       .createBank({
-        name: res.name || "前端基础练习题库",
-        desc: "内置示例，含单选 / 多选 / 判断",
+        name: res.name || bank.name,
+        desc: bank.desc,
         questions: res.questions,
         public: false,
       })
@@ -164,16 +184,16 @@ Page(shareUtil.withShare({
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        console.log("[示例题库] 保存成功", data);
+        console.log("[内置题库] 保存成功", bank.name, data);
         wx.hideLoading();
-        wx.showToast({ title: "已载入示例题库", icon: "success" });
+        wx.showToast({ title: "已添加内置题库", icon: "success" });
         return self.refresh();
       })
       .catch(function (err) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        console.error("[示例题库] 保存失败", err);
+        console.error("[内置题库] 保存失败", bank.name, err);
         wx.hideLoading();
         wx.showModal({
           title: "载入失败",

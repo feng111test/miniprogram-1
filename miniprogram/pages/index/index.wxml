@@ -33,7 +33,7 @@
       <view class="empty-title">还没有题库</view>
       <view class="empty-desc">支持导入 JSON 或文本格式的题目，导入后即可开始刷题</view>
       <button class="btn-primary empty-btn" bindtap="onImport">立即导入题库</button>
-      <button class="btn-ghost empty-btn" bindtap="onLoadSample">载入示例题库</button>
+      <button class="btn-ghost empty-btn" bindtap="onLoadSample">选择内置题库</button>
     </view>
 
     <view
@@ -68,6 +68,7 @@
     </view>
 
     <view wx:if="{{banks.length}}" class="tip">长按题库卡片可重命名 / 清空记录 / 删除</view>
+    <view wx:if="{{banks.length}}" class="template-link" bindtap="onLoadSample">＋ 添加内置题库（含高考化学）</view>
     <view class="pad"></view>
   </scroll-view>
 

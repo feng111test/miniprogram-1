@@ -274,6 +274,13 @@
   padding: 8rpx 0 32rpx;
 }
 
+.template-link {
+  text-align: center;
+  font-size: 26rpx;
+  color: #4b6ef5;
+  padding: 12rpx 0 32rpx;
+}
+
 .pad {
   height: 120rpx;
 }
