@@ -4,6 +4,16 @@
   flex-direction: column;
 }
 
+/* 只有题目列表区域可伸缩滚动，其余区块禁止被压缩，
+   否则 button 内容会被裁掉，只露出上半部分 */
+.header,
+.stat-row,
+.share-card,
+.filter,
+.footer {
+  flex-shrink: 0;
+}
+
 .header {
   padding: 40rpx 32rpx;
   background: linear-gradient(135deg, #4b6ef5, #6d8bff);
@@ -93,6 +103,8 @@
 .share-card {
   margin: 0 24rpx 24rpx;
   padding: 24rpx;
+  /* 覆盖 button 的默认高度，改为由内容撑开 */
+  height: auto;
   background: linear-gradient(135deg, #4b6ef5, #6d8bff);
   border-radius: 20rpx;
   color: #fff;
@@ -134,6 +146,9 @@
 
 .body {
   flex: 1;
+  /* min-height:0 是 flex 子项滚动区域的必要声明，
+     否则内容撑开时无法正确收缩 */
+  min-height: 0;
   padding: 0 24rpx;
 }
 
