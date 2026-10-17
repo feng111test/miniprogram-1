@@ -1,6 +1,7 @@
 var store = require("../../utils/store");
+var shareUtil = require("../../utils/share");
 
-Page({
+Page(shareUtil.withShare({
   data: {
     bankId: "",
     bankName: "",
@@ -84,4 +85,12 @@ Page({
   onBackHome: function () {
     wx.reLaunch({ url: "/pages/index/index" });
   },
-});
+}, function () {
+  // 分享成绩卡片，带上题库名与正确率
+  return {
+    title:
+      "我在「" + this.data.bankName + "」刷了 " + this.data.total +
+      " 题，正确率 " + this.data.accuracy + "%，敢来比比吗？",
+    path: "/pages/index/index?from=result&bank=" + encodeURIComponent(this.data.bankName),
+  };
+}));

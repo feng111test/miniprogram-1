@@ -1,5 +1,6 @@
 var store = require("../../utils/store");
 var parser = require("../../utils/parser");
+var shareUtil = require("../../utils/share");
 
 var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断" };
 var MODE_TEXT = {
@@ -29,7 +30,7 @@ function shuffle(arr) {
   return a;
 }
 
-Page({
+Page(shareUtil.withShare({
   data: {
     bankId: "",
     mode: "sequence",
@@ -405,4 +406,10 @@ Page({
       this.timer = null;
     }
   },
-});
+}, function () {
+  // 转发时题库在对方手机本地并不存在，因此统一回落到首页并带上来访来源
+  return {
+    title: "我在刷「" + this.data.bankName + "」，一起来挑战吧",
+    path: "/pages/index/index?from=result",
+  };
+}));

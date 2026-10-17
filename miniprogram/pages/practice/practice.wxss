@@ -399,3 +399,14 @@
   font-size: 24rpx;
   color: #8a93a5;
 }
+
+.sheet-share {
+  margin-top: 24rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  border-radius: 16rpx;
+  background: #e8efff;
+  color: #4b6ef5;
+  font-size: 28rpx;
+  text-align: center;
+}

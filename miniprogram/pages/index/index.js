@@ -1,6 +1,7 @@
 var store = require("../../utils/store");
 var sample = require("../../utils/sample");
 var parser = require("../../utils/parser");
+var shareUtil = require("../../utils/share");
 
 function pad(n) {
   return n < 10 ? "0" + n : "" + n;
@@ -12,10 +13,25 @@ function formatDate(ts) {
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
-Page({
+Page(shareUtil.withShare({
   data: {
     banks: [],
     summary: { banks: 0, total: 0, answered: 0, accuracy: 0 },
+    shareTip: "",
+  },
+
+  onLoad: function (options) {
+    // 好友通过转发卡片进入时给出引导
+    var q = shareUtil.getQuery(options);
+    if (q.from === "share") {
+      this.setData({
+        shareTip: "好友给你分享了刷题助手，先载入示例题库体验一下吧",
+      });
+    } else if (q.from === "result") {
+      var tip = "好友分享了他的练习成绩";
+      if (q.bank) tip += "（" + q.bank + "）";
+      this.setData({ shareTip: tip + "，导入题库和他比比看" });
+    }
   },
 
   onShow: function () {
@@ -80,9 +96,9 @@ Page({
         var mode = modes[res.tapIndex];
         wx.navigateTo({
           url: "/pages/practice/practice?id=" + id + "&mode=" + mode,
-        });
-      },
-      fail: function () {},
+      });
+    },
+    fail: function () {},
     });
   },
 
@@ -131,8 +147,8 @@ Page({
           store.resetRecord(id);
           self.refresh();
           wx.showToast({ title: "已清空", icon: "success" });
-        }
-      },
+      }
+    },
     });
   },
 
@@ -140,15 +156,24 @@ Page({
     var self = this;
     wx.showModal({
       title: "删除题库",
-      content: '确定删除「' + name + '」吗？该操作不可恢复。',
+      content: "确定删除「" + name + "」吗？该操作不可恢复。",
       confirmColor: "#F04438",
       success: function (res) {
         if (res.confirm) {
           store.deleteBank(id);
           self.refresh();
           wx.showToast({ title: "已删除", icon: "success" });
-        }
-      },
+      }
+    },
     });
   },
-});
+
+  onCloseShareTip: function () {
+    this.setData({ shareTip: "" });
+  },
+}, function () {
+  return {
+    title: "刷题助手 · 支持题库导入，随时随地在线刷题",
+    path: "/pages/index/index?from=share",
+  };
+}));

@@ -105,6 +105,7 @@
         <text>正确 {{stats.right}}</text>
         <text>错误 {{stats.wrong}}</text>
       </view>
+      <button class="sheet-share" open-type="share">↗ 邀请好友一起刷</button>
     </view>
   </view>
 </view>

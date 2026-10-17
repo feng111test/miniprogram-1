@@ -1,10 +1,11 @@
 var store = require("../../utils/store");
 var parser = require("../../utils/parser");
 var sample = require("../../utils/sample");
+var shareUtil = require("../../utils/share");
 
 var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断" };
 
-Page({
+Page(shareUtil.withShare({
   data: {
     name: "",
     content: "",
@@ -141,4 +142,9 @@ Page({
       wx.navigateBack();
     }, 500);
   },
-});
+}, function () {
+  return {
+    title: "刷题助手 · 一键导入题库，随时随地刷题",
+    path: "/pages/index/index?from=share",
+  };
+}));

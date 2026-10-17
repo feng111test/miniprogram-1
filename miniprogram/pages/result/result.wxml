@@ -29,6 +29,11 @@
     </view>
   </view>
 
+  <button class="share-card" open-type="share">
+    <text class="share-card-title">↗ 分享我的成绩给好友</text>
+    <text class="share-card-desc">正确率 {{accuracy}}% · 答对 {{right}}/{{total}} · 用时 {{timeText}}</text>
+  </button>
+
   <view class="filter">
     <view class="filter-item {{filter === 'all' ? 'on' : ''}}" data-filter="all" bindtap="onFilter">全部</view>
     <view class="filter-item {{filter === 'wrong' ? 'on' : ''}}" data-filter="wrong" bindtap="onFilter">错题 {{wrong}}</view>

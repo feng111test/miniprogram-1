@@ -90,6 +90,28 @@
   color: #8a93a5;
 }
 
+.share-card {
+  margin: 0 24rpx 24rpx;
+  padding: 24rpx;
+  background: linear-gradient(135deg, #4b6ef5, #6d8bff);
+  border-radius: 20rpx;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.share-card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.share-card-desc {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  opacity: 0.9;
+}
+
 .filter {
   display: flex;
   flex-direction: row;
