@@ -2,6 +2,7 @@ var store = require("../../utils/store");
 var parser = require("../../utils/parser");
 var sample = require("../../utils/sample");
 var shareUtil = require("../../utils/share");
+var ui = require("../../utils/ui");
 
 var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断" };
 
@@ -151,18 +152,14 @@ Page(shareUtil.withShare({
         public: this.data.isPublic,
       })
       .then(function () {
-        wx.hideLoading();
-        wx.showToast({ title: "导入成功", icon: "success" });
-        setTimeout(function () {
-          wx.navigateBack();
-        }, 500);
+        ui.success("导入成功", function () {
+          setTimeout(function () {
+            wx.navigateBack();
+          }, 500);
+        });
       })
       .catch(function (err) {
-        wx.hideLoading();
-        wx.showToast({
-          title: (err && err.message) || "导入失败",
-          icon: "none",
-        });
+        ui.fail("导入题库", err, "导入失败");
       });
   },
 }, function () {

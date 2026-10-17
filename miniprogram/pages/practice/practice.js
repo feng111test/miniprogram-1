@@ -1,6 +1,7 @@
 var store = require("../../utils/store");
 var parser = require("../../utils/parser");
 var shareUtil = require("../../utils/share");
+var ui = require("../../utils/ui");
 
 var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断" };
 var MODE_TEXT = {
@@ -445,15 +446,11 @@ Page(shareUtil.withShare({
       store
         .saveAnswers(self.data.bankId, payload)
         .then(function () {
-          wx.hideLoading();
+          ui.hideLoading();
           goResult();
         })
         .catch(function (err) {
-          wx.hideLoading();
-          wx.showToast({
-            title: (err && err.message) || "交卷失败",
-            icon: "none",
-          });
+          ui.fail("交卷", err, "交卷失败");
         });
     };
 

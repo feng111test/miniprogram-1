@@ -64,6 +64,7 @@ function call(action, payload) {
     .then(function (res) {
       var result = res && res.result ? res.result : null;
       if (!result) throw new Error("云服务返回异常");
+      console.log("[云调用]", action, "云端部署标记 =", result.tag || "(无，说明跑的是旧代码)");
       if (result.ok === false) throw new Error(result.message || "操作失败");
       return result.data;
     })

@@ -2,6 +2,7 @@ var store = require("../../utils/store");
 var sample = require("../../utils/sample");
 var parser = require("../../utils/parser");
 var shareUtil = require("../../utils/share");
+var ui = require("../../utils/ui");
 
 function pad(n) {
   return n < 10 ? "0" + n : "" + n;
@@ -54,6 +55,8 @@ Page(shareUtil.withShare({
     return store
       .getBanks()
       .then(function (list) {
+        console.log("[首页] 列表返回条数 =", (list || []).length, list);
+
         var banks = (list || []).map(function (b) {
           b.percent = b.count ? Math.round((b.answered / b.count) * 100) : 0;
           b.timeText = formatDate(b.updatedAt);
@@ -109,13 +112,47 @@ Page(shareUtil.withShare({
 
   onLoadSample: function () {
     var self = this;
-    var res = parser.parseBank(sample.SAMPLE_TEXT);
-    if (!res.questions.length) {
-      wx.showToast({ title: "示例题库解析失败", icon: "none" });
+    var res = null;
+    var settled = false;
+
+    try {
+      res = parser.parseBank(sample.SAMPLE_TEXT);
+    } catch (e) {
+      console.error("[示例题库] 解析异常", e);
+      wx.showModal({
+        title: "解析失败",
+        content: String((e && e.message) || e),
+        showCancel: false,
+      });
       return;
     }
 
-    wx.showLoading({ title: "保存中" });
+    if (!res || !res.questions || !res.questions.length) {
+      console.error("[示例题库] 解析结果为空", res);
+      wx.showModal({
+        title: "解析失败",
+        content: "示例文本没有解析出题目",
+        showCancel: false,
+      });
+      return;
+    }
+
+    console.log("[示例题库] 开始创建，题量 =", res.questions.length);
+    wx.showLoading({ title: "保存中", mask: true });
+
+    // 超时兜底：云函数长时间无响应时给出明确提示，避免「完全没反应」
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      wx.hideLoading();
+      wx.showModal({
+        title: "操作超时",
+        content:
+          "云函数 15 秒内没有返回。请到云开发控制台 → 云函数 → bankFunctions → 日志，查看具体报错。",
+        showCancel: false,
+      });
+    }, 15000);
+
     store
       .createBank({
         name: res.name || "前端基础练习题库",
@@ -123,16 +160,25 @@ Page(shareUtil.withShare({
         questions: res.questions,
         public: false,
       })
-      .then(function () {
+      .then(function (data) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        console.log("[示例题库] 保存成功", data);
         wx.hideLoading();
         wx.showToast({ title: "已载入示例题库", icon: "success" });
         return self.refresh();
       })
       .catch(function (err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        console.error("[示例题库] 保存失败", err);
         wx.hideLoading();
-        wx.showToast({
-          title: (err && err.message) || "保存失败",
-          icon: "none",
+        wx.showModal({
+          title: "载入失败",
+          content: String((err && err.message) || "保存失败"),
+          showCancel: false,
         });
       });
   },

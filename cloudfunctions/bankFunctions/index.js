@@ -13,6 +13,10 @@ const COLL_RECORD = "records"; // 每个用户 × 每个题库 一条练习记�
 const MAX_QUESTIONS = 500; // 单个题库题目上限
 const MAX_BANKS = 100; // 单个用户题库上限
 
+// 部署标记：每次改完云函数上传后把这里改一下，
+// 客户端控制台打印的标记若不一致，说明云端跑的还是旧代码
+const DEPLOY_TAG = "fix-openid-1";
+
 function now() {
   return Date.now();
 }
@@ -96,6 +100,15 @@ async function listBanks(openid) {
       .get(),
     db.collection(COLL_RECORD).where({ _openid: openid }).limit(MAX_BANKS).get(),
   ]);
+
+  console.log(
+    "[列表] openid =",
+    openid,
+    "题库数 =",
+    (bankRes.data || []).length,
+    "记录数 =",
+    (recordRes.data || []).length
+  );
 
   const recordMap = {};
   (recordRes.data || []).forEach(function (r) {
@@ -188,6 +201,7 @@ async function fetchQuestions(bankId) {
 async function createBank(data, openid) {
   const rawList = Array.isArray(data.questions) ? data.questions : [];
   const questions = rawList.map(normalizeQuestion).filter(Boolean).slice(0, MAX_QUESTIONS);
+  console.log("[创建题库] 收到题目数 =", rawList.length, "有效题目数 =", questions.length);
 
   if (!questions.length) throw bizError("没有解析到有效题目");
 
@@ -197,6 +211,9 @@ async function createBank(data, openid) {
   const ts = now();
   const addRes = await db.collection(COLL_BANK).add({
     data: {
+      // 必须显式写入归属者：云函数 add() 不会自动补 _openid，
+      // 不写的话后续按 _openid 过滤的列表查询会查不到这个题库
+      _openid: openid,
       name: str(data.name, 30) || "未命名题库",
       desc: str(data.desc, 100),
       count: questions.length,
@@ -295,6 +312,7 @@ async function ensureRecord(bankId, openid) {
   if (!record) {
     const addRes = await db.collection(COLL_RECORD).add({
       data: {
+        _openid: openid,
         bankId: bankId,
         answers: {},
         wrongIds: [],
@@ -406,59 +424,68 @@ async function ensureCollections() {
   for (let i = 0; i < names.length; i++) {
     try {
       await db.createCollection(names[i]);
+      console.log("[集合] 创建成功", names[i]);
     } catch (err) {
-      // 集合已存在时会报错，忽略即可
+      // 集合已存在时会报错，打印出来便于在云日志里确认
+      console.log("[集合] 已存在或创建失败", names[i], err && err.message);
     }
   }
   collectionsReady = true;
 }
 
+async function dispatch(action, event, openid) {
+  await ensureCollections();
+
+  switch (action) {
+    case "list":
+      return { ok: true, data: await listBanks(openid) };
+    case "get":
+      return { ok: true, data: await getBank(event.id, openid) };
+    case "create":
+      return { ok: true, data: await createBank(event, openid) };
+    case "update":
+      return { ok: true, data: await updateBank(event.id, event, openid) };
+    case "remove":
+      return { ok: true, data: await removeBank(event.id, openid) };
+    case "saveAnswer":
+      return {
+        ok: true,
+        data: await saveAnswer(event.bankId, event.qid, event.selected, event.correct, openid),
+      };
+    case "saveAnswers":
+      return {
+        ok: true,
+        data: await saveAnswers(event.bankId, event.answers, openid),
+      };
+    case "toggleStar":
+      return { ok: true, data: await toggleStar(event.bankId, event.qid, openid) };
+    case "setLastIndex":
+      return { ok: true, data: await setLastIndex(event.bankId, event.index, openid) };
+    case "resetRecord":
+      return { ok: true, data: await resetRecord(event.bankId, openid) };
+    default:
+      return { ok: false, message: "未知操作：" + action };
+  }
+}
+
 exports.main = async (event = {}) => {
   const openid = (cloud.getWXContext() || {}).OPENID || "";
   if (!openid) {
-    return { ok: false, message: "无法获取用户身份，请重新进入" };
+    return { ok: false, message: "无法获取用户身份，请重新进入", tag: DEPLOY_TAG };
   }
 
-  const { action } = event;
-
+  let result;
   try {
-    await ensureCollections();
-
-    switch (action) {
-      case "list":
-        return { ok: true, data: await listBanks(openid) };
-      case "get":
-        return { ok: true, data: await getBank(event.id, openid) };
-      case "create":
-        return { ok: true, data: await createBank(event, openid) };
-      case "update":
-        return { ok: true, data: await updateBank(event.id, event, openid) };
-      case "remove":
-        return { ok: true, data: await removeBank(event.id, openid) };
-      case "saveAnswer":
-        return {
-          ok: true,
-          data: await saveAnswer(event.bankId, event.qid, event.selected, event.correct, openid),
-        };
-      case "saveAnswers":
-        return {
-          ok: true,
-          data: await saveAnswers(event.bankId, event.answers, openid),
-        };
-      case "toggleStar":
-        return { ok: true, data: await toggleStar(event.bankId, event.qid, openid) };
-      case "setLastIndex":
-        return { ok: true, data: await setLastIndex(event.bankId, event.index, openid) };
-      case "resetRecord":
-        return { ok: true, data: await resetRecord(event.bankId, openid) };
-      default:
-        return { ok: false, message: "未知操作：" + action };
-    }
+    result = await dispatch(event.action, event, openid);
   } catch (err) {
     // 业务异常直接提示，其它异常不暴露内部信息
-    return {
+    result = {
       ok: false,
       message: err && err.isBizError ? err.message : "云服务异常，请稍后重试",
     };
   }
+
+  // 客户端会打印这个标记，用来确认云端跑的是不是最新代码
+  result.tag = DEPLOY_TAG;
+  return result;
 };

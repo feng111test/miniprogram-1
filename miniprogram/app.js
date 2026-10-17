@@ -53,4 +53,14 @@ App({
 
     if (RUN_DIAGNOSE) diagnose(this);
   },
+
+  // 捕获未被 try/catch 接住的异常
+  onError: function (err) {
+    console.error("[全局异常]", err);
+    wx.showModal({
+      title: "运行异常",
+      content: String(err || "未知错误"),
+      showCancel: false,
+    });
+  },
 });
