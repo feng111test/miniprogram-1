@@ -190,7 +190,8 @@ Page({
       currentIndex: idx,
       stats: stats,
       percent: Math.round(((idx + 1) / this.list.length) * 100),
-      scrollTop: 0,
+      // 0/1 交替，保证每次切题都会触发滚动到顶部
+      scrollTop: this.data.scrollTop === 0 ? 1 : 0,
     });
   },
 

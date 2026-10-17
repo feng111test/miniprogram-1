@@ -74,7 +74,6 @@ Page({
       modes.push("star");
     }
 
-    var self = this;
     wx.showActionSheet({
       itemList: items,
       success: function (res) {

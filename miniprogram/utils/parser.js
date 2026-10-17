@@ -184,18 +184,24 @@ function buildQuestion(fields, order) {
   var options = fields.options || [];
   var type = fields.type || (options.length ? "single" : "judge");
   var explanation = String(fields.explanation || "").trim();
-  var keys = options.map(function (o) {
-    return o.key;
-  });
-  var answer = normalizeAnswer(fields.answer, type, keys);
+  var keys;
 
-  if (type !== "judge" && answer.length > 1) type = "multiple";
-  if (type === "judge" && !options.length) {
+  // 判断题统一使用「正确 / 错误」作为选项键，保证与答案比对一致
+  if (type === "judge") {
     options = [
       { key: "正确", content: "正确" },
       { key: "错误", content: "错误" },
     ];
+    keys = ["正确", "错误"];
+  } else {
+    keys = options.map(function (o) {
+      return o.key;
+    });
   }
+
+  var answer = normalizeAnswer(fields.answer, type, keys);
+
+  if (type !== "judge" && answer.length > 1) type = "multiple";
 
   if (!title) return { error: "缺少题干" };
   if (!answer.length) return { error: "缺少或无法识别答案" };
