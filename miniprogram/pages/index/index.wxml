@@ -18,8 +18,17 @@
     <text class="share-tip-close" bindtap="onCloseShareTip">×</text>
   </view>
 
+  <view wx:if="{{cloudError}}" class="cloud-error">
+    <view class="cloud-error-head">
+      <text class="cloud-error-title">云开发连接失败</text>
+      <text class="cloud-error-retry" bindtap="onRetry">重试</text>
+    </view>
+    <text class="cloud-error-msg">{{cloudError}}</text>
+    <text class="cloud-error-help" bindtap="onShowCloudHelp">查看解决步骤 ›</text>
+  </view>
+
   <scroll-view scroll-y class="list" enable-flex>
-    <view wx:if="{{banks.length === 0}}" class="empty">
+    <view wx:if="{{banks.length === 0 && !cloudError}}" class="empty">
       <view class="empty-icon">📚</view>
       <view class="empty-title">还没有题库</view>
       <view class="empty-desc">支持导入 JSON 或文本格式的题目，导入后即可开始刷题</view>
@@ -44,6 +53,8 @@
         <view class="bar-inner" style="width: {{item.percent}}%"></view>
       </view>
       <view class="card-meta">
+        <text class="tag tag-public" wx:if="{{item.public}}">已公开</text>
+        <text class="tag tag-shared" wx:if="{{!item.mine}}">好友共享</text>
         <text class="tag tag-single" wx:if="{{item.typeStat.single}}">单选 {{item.typeStat.single}}</text>
         <text class="tag tag-multiple" wx:if="{{item.typeStat.multiple}}">多选 {{item.typeStat.multiple}}</text>
         <text class="tag tag-judge" wx:if="{{item.typeStat.judge}}">判断 {{item.typeStat.judge}}</text>

@@ -65,18 +65,48 @@ Page(shareUtil.withShare({
   startAt: 0,
 
   onLoad: function (options) {
+    var self = this;
     var id = options.id;
     var mode = options.mode || "sequence";
-    var bank = store.getBank(id);
 
-    if (!bank || !bank.questions || !bank.questions.length) {
-      wx.showToast({ title: "题库为空或不存在", icon: "none" });
+    if (!id) {
+      wx.showToast({ title: "缺少题库 ID", icon: "none" });
       setTimeout(function () {
         wx.navigateBack();
       }, 800);
       return;
     }
 
+    wx.showLoading({ title: "加载中" });
+
+    store
+      .getBank(id)
+      .then(function (bank) {
+        wx.hideLoading();
+
+        if (!bank || !bank.questions || !bank.questions.length) {
+          wx.showToast({ title: "题库为空或不存在", icon: "none" });
+          setTimeout(function () {
+            wx.navigateBack();
+          }, 800);
+          return;
+        }
+
+        self.initPractice(bank, mode);
+      })
+      .catch(function (err) {
+        wx.hideLoading();
+        wx.showToast({
+          title: (err && err.message) || "加载题库失败",
+          icon: "none",
+        });
+        setTimeout(function () {
+          wx.navigateBack();
+        }, 800);
+      });
+  },
+
+  initPractice: function (bank, mode) {
     var list;
     if (mode === "random") list = shuffle(bank.questions);
     else if (mode === "wrong")
@@ -113,7 +143,7 @@ Page(shareUtil.withShare({
     this.session = session;
 
     this.setData({
-      bankId: id,
+      bankId: bank.id,
       mode: mode,
       modeText: MODE_TEXT[mode] || "练习",
       bankName: bank.name,
@@ -133,7 +163,11 @@ Page(shareUtil.withShare({
   onUnload: function () {
     this.stopTimer();
     if (this.data.mode === "sequence" && this.data.bankId) {
-      store.setLastIndex(this.data.bankId, this.data.index);
+      store
+        .setLastIndex(this.data.bankId, this.data.index)
+        .catch(function (err) {
+          console.error("保存进度失败", err);
+        });
     }
   },
 
@@ -244,9 +278,20 @@ Page(shareUtil.withShare({
 
   persist: function (q) {
     var s = this.session[q.id];
-    store.saveAnswer(this.data.bankId, q.id, s.selected, s.correct);
+
+    // 写云端，失败不阻塞刷题，仅记录日志
+    store
+      .saveAnswer(this.data.bankId, q.id, s.selected, s.correct)
+      .catch(function (err) {
+        console.error("保存作答失败", err);
+      });
+
     if (this.data.mode === "sequence") {
-      store.setLastIndex(this.data.bankId, this.data.index);
+      store
+        .setLastIndex(this.data.bankId, this.data.index)
+        .catch(function (err) {
+          console.error("保存进度失败", err);
+        });
     }
   },
 
@@ -256,7 +301,11 @@ Page(shareUtil.withShare({
     if (i < 0 || i >= this.list.length) return;
     this.setData({ index: i });
     if (this.data.mode === "sequence") {
-      store.setLastIndex(this.data.bankId, i);
+      store
+        .setLastIndex(this.data.bankId, i)
+        .catch(function (err) {
+          console.error("保存进度失败", err);
+        });
     }
     this.render();
   },
@@ -282,17 +331,27 @@ Page(shareUtil.withShare({
   onSheetTap: function () {},
 
   onToggleStar: function () {
+    var self = this;
     var q = this.list[this.data.index];
     if (!q) return;
-    store.toggleStar(this.data.bankId, q.id);
-    this.bank = store.getBank(this.data.bankId) || this.bank;
-    this.setData({
-      starred: this.bank.record.starIds.indexOf(q.id) > -1,
-    });
-    wx.showToast({
-      title: this.data.starred ? "已收藏" : "已取消收藏",
-      icon: "none",
-    });
+
+    store
+      .toggleStar(this.data.bankId, q.id)
+      .then(function (res) {
+        var starIds = (res && res.starIds) || [];
+        self.bank.record.starIds = starIds;
+        self.setData({ starred: starIds.indexOf(q.id) > -1 });
+        wx.showToast({
+          title: self.data.starred ? "已收藏" : "已取消收藏",
+          icon: "none",
+        });
+      })
+      .catch(function (err) {
+        wx.showToast({
+          title: (err && err.message) || "操作失败",
+          icon: "none",
+        });
+      });
   },
 
   onQuit: function () {
@@ -316,6 +375,7 @@ Page(shareUtil.withShare({
     var isExam = this.data.mode === "exam";
     var self = this;
     var items = [];
+    var payload = {};
     var right = 0;
     var wrong = 0;
     var unanswered = 0;
@@ -328,7 +388,7 @@ Page(shareUtil.withShare({
         correct = s.selected.length ? parser.arrEqual(s.selected, q.answer) : false;
         s.correct = correct;
         s.answered = s.selected.length > 0;
-        store.saveAnswer(self.data.bankId, q.id, s.selected, correct);
+        payload[q.id] = { selected: s.selected, correct: correct };
       } else {
         correct = !!s.correct;
       }
@@ -354,7 +414,7 @@ Page(shareUtil.withShare({
       });
     });
 
-    var submit = function () {
+    var goResult = function () {
       var seconds = Math.floor((Date.now() - self.startAt) / 1000);
       store.saveResult({
         bankId: self.data.bankId,
@@ -372,6 +432,29 @@ Page(shareUtil.withShare({
         createdAt: Date.now(),
       });
       wx.redirectTo({ url: "/pages/result/result" });
+    };
+
+    var submit = function () {
+      // 练习模式的作答已在答题时逐题写入云端，直接出结果
+      if (!isExam) {
+        goResult();
+        return;
+      }
+
+      wx.showLoading({ title: "交卷中" });
+      store
+        .saveAnswers(self.data.bankId, payload)
+        .then(function () {
+          wx.hideLoading();
+          goResult();
+        })
+        .catch(function (err) {
+          wx.hideLoading();
+          wx.showToast({
+            title: (err && err.message) || "交卷失败",
+            icon: "none",
+          });
+        });
     };
 
     if (isExam && unanswered > 0) {

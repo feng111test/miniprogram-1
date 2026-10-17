@@ -11,6 +11,14 @@
       />
     </view>
 
+    <view class="section switch-row">
+      <view class="switch-info">
+        <view class="switch-title">设为公开题库</view>
+        <view class="switch-desc">公开后好友可在自己的题库列表中看到并练习</view>
+      </view>
+      <switch checked="{{isPublic}}" bindchange="onTogglePublic" color="#4B6EF5" />
+    </view>
+
     <view class="section">
       <view class="label-row">
         <view class="label">题目内容</view>

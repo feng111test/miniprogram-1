@@ -75,6 +75,50 @@
   color: #d4a106;
 }
 
+.cloud-error {
+  margin: 20rpx 24rpx 0;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: #fef3f2;
+  border: 1rpx solid #fecdca;
+}
+
+.cloud-error-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cloud-error-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #b42318;
+}
+
+.cloud-error-retry {
+  font-size: 26rpx;
+  color: #b42318;
+  padding: 4rpx 16rpx;
+  border: 1rpx solid #fda29b;
+  border-radius: 24rpx;
+}
+
+.cloud-error-msg {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #912018;
+  line-height: 1.6;
+}
+
+.cloud-error-help {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #4b6ef5;
+}
+
 .list {
   flex: 1;
   margin-top: -20rpx;
@@ -155,6 +199,16 @@
 .tag-single {
   background: #e8efff;
   color: #4b6ef5;
+}
+
+.tag-public {
+  background: #e9f7ef;
+  color: #16b364;
+}
+
+.tag-shared {
+  background: #f2e9ff;
+  color: #7a4bd4;
 }
 
 .tag-multiple {

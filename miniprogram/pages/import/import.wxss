@@ -36,6 +36,31 @@
   color: #a4abb8;
 }
 
+.switch-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch-info {
+  flex: 1;
+  padding-right: 20rpx;
+}
+
+.switch-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.switch-desc {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #8a93a5;
+  line-height: 1.5;
+}
+
 .input {
   height: 88rpx;
   background: #f5f7fa;

@@ -11,6 +11,7 @@ Page(shareUtil.withShare({
     content: "",
     parsed: null,
     showHelp: false,
+    isPublic: false,
   },
 
   questions: [],
@@ -123,7 +124,12 @@ Page(shareUtil.withShare({
     this.setData({ showHelp: !this.data.showHelp });
   },
 
+  onTogglePublic: function (e) {
+    this.setData({ isPublic: !!e.detail.value });
+  },
+
   onSave: function () {
+    var self = this;
     if (!this.questions.length) {
       wx.showToast({ title: "请先导入题目内容", icon: "none" });
       return;
@@ -135,12 +141,29 @@ Page(shareUtil.withShare({
       "共 " + this.questions.length + " 题 · 导入于 " +
       d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
 
-    store.createBank({ name: name, desc: desc, questions: this.questions });
-    wx.showToast({ title: "导入成功", icon: "success" });
+    wx.showLoading({ title: "保存中" });
 
-    setTimeout(function () {
-      wx.navigateBack();
-    }, 500);
+    store
+      .createBank({
+        name: name,
+        desc: desc,
+        questions: this.questions,
+        public: this.data.isPublic,
+      })
+      .then(function () {
+        wx.hideLoading();
+        wx.showToast({ title: "导入成功", icon: "success" });
+        setTimeout(function () {
+          wx.navigateBack();
+        }, 500);
+      })
+      .catch(function (err) {
+        wx.hideLoading();
+        wx.showToast({
+          title: (err && err.message) || "导入失败",
+          icon: "none",
+        });
+      });
   },
 }, function () {
   return {
