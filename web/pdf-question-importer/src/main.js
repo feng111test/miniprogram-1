@@ -39,6 +39,7 @@ const elements = {
   zoomIn: byId("zoomIn"),
   zoomOut: byId("zoomOut"),
   zoomLabel: byId("zoomLabel"),
+  screenshotMode: byId("screenshotMode"),
   clearCrop: byId("clearCrop"),
   runOcr: byId("runOcr"),
   rerunAllOcr: byId("rerunAllOcr"),
@@ -108,6 +109,7 @@ const state = {
   busy: false,
   cropStart: null,
   cropRect: null,
+  cropMode: false,
   toastTimer: null,
   bankId: null,
   bankName: "",
@@ -155,9 +157,18 @@ function activeQuestion() {
 }
 
 function repairOptionsFromTitle(question) {
-  if (!question.title || question.options.some((option) => option.content.trim())) return false;
-  const parsed = splitOcrQuestions(question.title, question.sourcePage || 1)[0];
-  if (!parsed || parsed.title === question.title || !parsed.options.some((option) => option.content)) return false;
+  if (!question.title) return false;
+  const existingOptions = Array.isArray(question.options) ? question.options : [];
+  const combinedText = [
+    question.title,
+    ...existingOptions.map((option) => `${option.key}. ${option.content}`),
+  ].join("\n");
+  const parsed = splitOcrQuestions(combinedText, question.sourcePage || 1)[0];
+  if (!parsed?.options.some((option) => option.content)) return false;
+  const needsRepair =
+    parsed.options.length > existingOptions.length ||
+    (!existingOptions.some((option) => option.content.trim()) && parsed.title !== question.title);
+  if (!needsRepair) return false;
   question.title = parsed.title;
   question.options = parsed.options;
   return true;
@@ -171,6 +182,9 @@ function updateButtons() {
   elements.zoomIn.disabled = !hasPdf || state.zoom >= 2.5 || state.busy;
   elements.runOcr.disabled = !hasPdf || state.busy;
   elements.rerunAllOcr.disabled = !hasPdf || state.busy;
+  elements.screenshotMode.disabled = !hasPdf || state.busy;
+  elements.screenshotMode.textContent = state.cropMode ? "退出截图" : "截图并插入";
+  elements.screenshotMode.classList.toggle("accent", state.cropMode);
   elements.clearCrop.disabled = !state.cropRect;
   elements.input.disabled = state.busy;
   elements.exportJson.disabled = state.questions.length === 0;
@@ -239,14 +253,14 @@ async function restoreBankFor(fileName) {
 }
 
 async function openPdf(file) {
-  if (!file) return;
+  if (!file) return false;
   if (file.type && file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
     showToast("请选择 PDF 文件");
-    return;
+    return false;
   }
   if (file.size > MAX_PDF_BYTES) {
     showToast("PDF 文件不能超过 100 MB");
-    return;
+    return false;
   }
 
   closePdf();
@@ -268,7 +282,7 @@ async function openPdf(file) {
     state.zoom = 1;
     elements.fileCard.classList.remove("empty");
     elements.fileName.textContent = file.name;
-    elements.documentMeta.textContent = `${formatBytes(file.size)} · ${state.pageCount} 页 · 题目会自动存入题库`;
+    elements.documentMeta.textContent = `${formatBytes(file.size)} · ${state.pageCount} 页 · 自动优先提取 PDF 文本`;
     elements.welcome.hidden = true;
     elements.pageCanvasWrap.hidden = false;
     elements.pageCount.textContent = String(state.pageCount);
@@ -282,12 +296,47 @@ async function openPdf(file) {
       setBusy(false);
       await runOcr({ allPages: true });
     }
+    return true;
   } catch (error) {
     console.error("[PDF 导入] 打开失败", error?.stack || String(error));
     closePdf();
     showToast(`无法打开 PDF：${error.message || "文件可能已损坏或受密码保护"}`);
+    return false;
   } finally {
     setBusy(false);
+  }
+}
+
+async function openPdfFiles(files) {
+  const pdfFiles = [];
+  const rejectedFiles = [];
+  for (const file of files) {
+    if ((file.type && file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) ||
+        file.size > MAX_PDF_BYTES) {
+      rejectedFiles.push(file.name);
+    } else {
+      pdfFiles.push(file);
+    }
+  }
+  if (!pdfFiles.length) {
+    showToast(rejectedFiles.length ? `无法处理：${rejectedFiles.slice(0, 3).join("、")}（仅支持不超过 100 MB 的 PDF）` : "请选择 PDF 文件");
+    return;
+  }
+
+  if (pdfFiles.length > 1 && state.questions.length &&
+      !window.confirm(`将依次打开 ${pdfFiles.length} 份 PDF；当前页面会切换，但已保存题库不会被覆盖。继续吗？`)) {
+    return;
+  }
+
+  let completed = 0;
+  let failed = 0;
+  for (const [index, file] of pdfFiles.entries()) {
+    showToast(`正在处理第 ${index + 1} / ${pdfFiles.length} 份：${file.name}`);
+    if (await openPdf(file)) completed += 1;
+    else failed += 1;
+  }
+  if (pdfFiles.length > 1) {
+    showToast(`批次处理完成：成功 ${completed} 份，失败 ${failed} 份${rejectedFiles.length ? `，跳过 ${rejectedFiles.length} 个不支持文件` : ""}`);
   }
 }
 
@@ -310,7 +359,7 @@ function closePdf() {
   elements.pageLabel.textContent = "等待导入 PDF";
   elements.canvas.width = 0;
   elements.canvas.height = 0;
-  clearCrop();
+  setCropMode(false);
   updateButtons();
 }
 
@@ -888,6 +937,16 @@ function clearCrop() {
   updateButtons();
 }
 
+function setCropMode(active) {
+  state.cropMode = active;
+  elements.cropLayer.classList.toggle("crop-mode", active);
+  if (!active) clearCrop();
+  else {
+    elements.pageHint.textContent = "截图模式已开启：在 PDF 页面拖动框选图片区域";
+    updateButtons();
+  }
+}
+
 function saveCrop() {
   const rect = state.cropRect;
   if (!rect || !state.pdf || rect.width < 12 || rect.height < 12) {
@@ -916,6 +975,7 @@ function saveCrop() {
     sourceHeight,
   );
   activeQuestion().images.push({ page: state.page, dataUrl: crop.toDataURL("image/png") });
+  setCropMode(false);
   clearCrop();
   renderImages();
   schedulePersist();
@@ -1090,11 +1150,40 @@ async function ensureOcrWorker(pageNumber) {
   await state.worker.setParameters({ preserve_interword_spaces: "1" });
 }
 
+async function extractEmbeddedPageText(page) {
+  const content = await page.getTextContent();
+  const lines = [];
+  for (const item of content.items) {
+    if (!("str" in item) || !item.str?.trim()) continue;
+    const y = item.transform?.[5] || 0;
+    const x = item.transform?.[4] || 0;
+    let line = lines.at(-1);
+    if (!line || Math.abs(line.y - y) > 2.5) {
+      line = { y, text: "", lastRight: x, fontSize: Math.abs(item.transform?.[0] || 0) };
+      lines.push(line);
+    }
+    const gap = x - line.lastRight;
+    if (line.text && gap > Math.max(2, line.fontSize * 0.3)) line.text += " ";
+    line.text += item.str.trim();
+    line.lastRight = x + (item.width || 0);
+  }
+  return lines.map((line) => line.text.trim()).filter(Boolean).join("\n");
+}
+
 async function recognizePage(pageNumber, index, total) {
   state.ocrRun.pageNumber = pageNumber;
-  setOcrPhase(total > 1 ? `准备第 ${pageNumber} / ${total} 页` : `准备第 ${pageNumber} 页`);
+  setOcrPhase(total > 1 ? `读取第 ${pageNumber} / ${total} 页` : `读取第 ${pageNumber} 页`);
   const pageStartedAt = performance.now();
   const page = await state.pdf.getPage(pageNumber);
+  const embeddedText = await extractEmbeddedPageText(page);
+  if (embeddedText.length >= 25) {
+    addOcrLog(`第 ${pageNumber} 页直接提取到 ${embeddedText.length} 个 PDF 文本字符，跳过 OCR。`);
+    setOcrProgress(total > 1 ? Math.round(((index + 1) / total) * 100) : 100);
+    return { text: embeddedText, method: "pdf-text" };
+  }
+
+  addOcrLog(`第 ${pageNumber} 页 PDF 内嵌文字不足，改用本机 OCR。`);
+  await ensureOcrWorker(pageNumber);
   const baseViewport = page.getViewport({ scale: 1 });
   const ocrCanvas = document.createElement("canvas");
   const ocrScale = Math.min(2.5, Math.max(1.8, 1800 / baseViewport.width));
@@ -1113,7 +1202,7 @@ async function recognizePage(pageNumber, index, total) {
   setBusy(true, `正在识别第 ${pageNumber} / ${total} 页…`);
   const { data } = await state.worker.recognize(ocrCanvas);
   addOcrLog(`第 ${pageNumber} 页识别返回，用时 ${formatDuration(performance.now() - recognitionStartedAt)}。`);
-  return String(data.text || "").trim();
+  return { text: String(data.text || "").trim(), method: "ocr" };
 }
 
 function splitOcrQuestions(pageText, pageNumber) {
@@ -1209,7 +1298,7 @@ function splitOcrPages(pages) {
 }
 
 function splitOcrOptions(segment) {
-  const optionMatches = [...segment.matchAll(/(?:^|[\s，,。！？;；：:])([A-F])(?:[.．、:：)）]|\s)\s*/g)];
+  const optionMatches = [...segment.matchAll(/(?:^|[\s，,。！？;；：:])([A-F])(?:[.．、:：)）]+|[,，]\s*[.．]|\s)\s*/g)];
   const markerStarts = optionMatches.map((match) => match.index + match[0].lastIndexOf(match[1]));
   const firstOption = markerStarts[0];
   const title = (firstOption === undefined ? segment : segment.slice(0, firstOption)).trim();
@@ -1243,8 +1332,8 @@ async function runOcr({ allPages = false, confirmReplace = false } = {}) {
     const recognized = [];
     for (let index = 0; index < pageNumbers.length; index += 1) {
       const pageNumber = pageNumbers[index];
-      const text = await recognizePage(pageNumber, index, pageNumbers.length);
-      if (text) recognized.push({ pageNumber, text });
+      const result = await recognizePage(pageNumber, index, pageNumbers.length);
+      if (result.text) recognized.push({ pageNumber, text: result.text, method: result.method });
       else addOcrLog(`第 ${pageNumber} 页未识别到文字。`);
     }
 
@@ -1369,10 +1458,10 @@ elements.practiceSubmit.addEventListener("click", () => {
   schedulePersist();
 });
 
-elements.input.addEventListener("change", (event) => {
-  const [file] = event.target.files || [];
-  if (file) openPdf(file);
+elements.input.addEventListener("change", async (event) => {
+  const files = Array.from(event.target.files || []);
   event.target.value = "";
+  if (files.length) await openPdfFiles(files);
 });
 elements.prevPage.addEventListener("click", () => goToPage(state.page - 1));
 elements.nextPage.addEventListener("click", () => goToPage(state.page + 1));
@@ -1384,9 +1473,10 @@ elements.zoomOut.addEventListener("click", () => {
   state.zoom = Math.max(0.75, Number((state.zoom - 0.15).toFixed(2)));
   goToPage(state.page);
 });
+elements.screenshotMode.addEventListener("click", () => setCropMode(!state.cropMode));
 elements.clearCrop.addEventListener("click", clearCrop);
 elements.cropLayer.addEventListener("pointerdown", (event) => {
-  if (!state.pdf || state.busy) return;
+  if (!state.pdf || state.busy || !state.cropMode) return;
   state.cropStart = cropCoordinates(event);
   elements.cropLayer.classList.add("dragging");
   elements.cropLayer.setPointerCapture(event.pointerId);

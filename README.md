@@ -56,7 +56,7 @@ npm run dev
 打开终端显示的网址，在顶部切换“Word 导入刷题”或“PDF 整理刷题”：
 
 - Word 模式：导入 `.docx`，提取选择题及答案解析后直接练习。
-- PDF 模式：本地 OCR/手动整理题目，保存后点击“开始刷题”，可直接练习刚整理的题目和裁剪图片；也可导出 JSON。
+- PDF 模式：可批量选择多份 PDF；优先读取 PDF 内嵌文字，仅扫描页使用本地 OCR。题目本地保存，校对后可直接刷题或导出 JSON。
 - 网页项目只需在 `web/` 安装一次依赖。Word/PDF 识别与练习均在本机浏览器运行，不会上传题目文件。
 
 PDF 逐页 OCR 的使用细节见 [PDF 整理说明](./web/pdf-question-importer/README.md)，Word 识别范围见 [Word 刷题说明](./web/word-quiz/README.md)。

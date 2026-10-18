@@ -8,6 +8,12 @@ import {
   saveBank,
 } from "../../src/question-bank.js";
 import { downloadBankFile, readBankFile, toWordQuestions } from "../../src/bank-file.js";
+import {
+  FORMULA_TOKEN,
+  escapeHtml,
+  formulaCount,
+  renderFormulaContent,
+} from "../../src/question-text.js";
 
 document.documentElement.classList.toggle("embedded", new URLSearchParams(location.search).has("embedded"));
 
@@ -60,19 +66,9 @@ const state = {
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const FORMULA_TOKEN = "\uE000";
 const FORMULA_SPACING_MIN = 150;
 const FORMULA_SPACING_MAX = 1100;
 const FORMULA_IMAGE_ROW_TOLERANCE = 3;
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
 
 function showToast(message) {
   ui.toast.textContent = message;
@@ -465,10 +461,6 @@ async function extractVmlImagePages(zip, documentXmlText) {
   return { pages, unresolvedImages };
 }
 
-function formulaCount(text) {
-  return text.split(FORMULA_TOKEN).length - 1;
-}
-
 function matchQuestionImages(question, imagePages, cursor, paragraphRange = null) {
   const targets = [
     { text: question.title, setImages: (images) => (question.titleImages = images) },
@@ -630,21 +622,6 @@ function responseFor(question) {
 
 function sameAnswer(left, right) {
   return left.length === right.length && [...left].sort().every((key, index) => key === [...right].sort()[index]);
-}
-
-function renderFormulaContent(text, images = [], fallback = "原文公式图片未能匹配") {
-  const parts = text.split(FORMULA_TOKEN);
-  return parts
-    .map((part, index) => {
-      const image = images[index];
-      const formula = image
-        ? `<img class="formula-image formula-inline" src="${escapeHtml(image.src)}" alt="Word 原文公式">`
-        : index < parts.length - 1
-          ? `<span class="formula-missing">${escapeHtml(fallback)}</span>`
-          : "";
-      return `${escapeHtml(part)}${formula}`;
-    })
-    .join("");
 }
 
 function renderList() {
