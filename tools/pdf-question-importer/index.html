@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="在本机识别化学试卷 PDF，校对题目，并将化学式和结构图裁剪为题目图片。"
+    />
+    <title>化学试卷 · 本地整理台</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="化学试卷本地整理台">
+          <span class="brand-mark">化</span>
+          <span>
+            <strong>化学试卷</strong>
+            <small>本地整理台</small>
+          </span>
+        </a>
+        <div class="privacy"><span class="privacy-dot"></span>文件只在本机处理</div>
+        <label class="button button-primary choose-button" for="pdfInput">选择 PDF</label>
+        <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
+      </header>
+
+      <main class="workspace">
+        <aside class="left-panel">
+          <section class="panel-section file-section">
+            <div class="section-eyebrow">SOURCE DOCUMENT</div>
+            <h1>整理一份试卷</h1>
+            <p class="muted">打开本地 PDF，逐页识别并把化学式、结构图裁剪进题目。</p>
+            <div id="fileCard" class="file-card empty">
+              <span class="file-icon">PDF</span>
+              <span id="fileName" class="file-name">尚未选择文件</span>
+            </div>
+            <div id="documentMeta" class="document-meta">PDF 不会上传到服务器</div>
+          </section>
+
+          <section class="panel-section page-section">
+            <div class="section-heading">
+              <div>
+                <div class="section-eyebrow">PAGES</div>
+                <h2>页面</h2>
+              </div>
+              <span id="pageCount" class="count-badge">0</span>
+            </div>
+            <div id="pageList" class="page-list empty-pages">
+              <div class="empty-note">选择 PDF 后显示页面</div>
+            </div>
+          </section>
+
+          <section class="panel-section tips-section">
+            <div class="tip-icon">i</div>
+            <div>
+              <strong>识别说明</strong>
+              <p>OCR 只辅助识别普通文字。化学式、反应式和图表建议框选原图，并人工核对答案。</p>
+            </div>
+          </section>
+        </aside>
+
+        <section class="document-column">
+          <div class="document-toolbar">
+            <div class="document-title">
+              <span class="live-dot"></span>
+              <span id="pageLabel">等待导入 PDF</span>
+            </div>
+            <div class="toolbar-actions">
+              <button id="zoomOut" class="icon-button" type="button" title="缩小" disabled>−</button>
+              <span id="zoomLabel" class="zoom-label">适合宽度</span>
+              <button id="zoomIn" class="icon-button" type="button" title="放大" disabled>+</button>
+              <span class="toolbar-divider"></span>
+              <button id="prevPage" class="button button-quiet" type="button" disabled>上一页</button>
+              <button id="nextPage" class="button button-quiet" type="button" disabled>下一页</button>
+            </div>
+          </div>
+          <div id="pdfStage" class="pdf-stage">
+            <div id="welcome" class="welcome">
+              <div class="welcome-art">
+                <span class="art-page art-page-back"></span>
+                <span class="art-page art-page-front">
+                  <i></i><i></i><i></i><b>H₂SO₄</b><i></i><i></i>
+                </span>
+                <span class="art-spark spark-one">+</span>
+                <span class="art-spark spark-two">·</span>
+              </div>
+              <h2>让试卷整理，留在你的电脑里</h2>
+              <p>导入 PDF 后可逐页 OCR、框选化学图片，题目和答案由你确认。</p>
+              <label class="button button-primary" for="pdfInput">打开本地 PDF</label>
+              <div class="welcome-foot">支持可选文字 PDF 与扫描件 · 不自动上传任何文件</div>
+            </div>
+            <div id="pageCanvasWrap" class="page-canvas-wrap" hidden>
+              <div id="pageCanvasSurface" class="page-canvas-surface">
+                <canvas id="pdfCanvas"></canvas>
+                <div id="cropLayer" class="crop-layer" aria-label="拖动框选要保存为题目图片的区域"></div>
+              </div>
+            </div>
+            <div id="stageStatus" class="stage-status" hidden></div>
+          </div>
+          <div class="document-footer">
+            <span id="pageHint">普通文字使用 OCR，化学表达式可框选后作为图片保存</span>
+            <button id="clearCrop" class="text-button" type="button" disabled>取消框选</button>
+          </div>
+        </section>
+
+        <aside class="right-panel">
+          <div class="right-panel-scroll">
+            <section class="editor-section">
+              <div class="editor-heading">
+                <div>
+                  <div class="section-eyebrow">QUESTION EDITOR</div>
+                  <h2>题目校对</h2>
+                </div>
+                <span id="questionCount" class="count-badge">0 题</span>
+              </div>
+
+              <label class="field-label" for="questionType">题型</label>
+              <select id="questionType" class="field-control">
+                <option value="single">单选题</option>
+                <option value="multiple">多选题</option>
+                <option value="judge">判断题</option>
+              </select>
+
+              <div class="label-with-action">
+                <label class="field-label" for="questionTitle">题干</label>
+                <button id="runOcr" class="text-button accent" type="button" disabled>
+                  <span class="sparkle">✳</span>识别本页文字
+                </button>
+              </div>
+              <textarea
+                id="questionTitle"
+                class="field-control title-input"
+                placeholder="识别后在这里编辑题干，也可以直接输入"
+                rows="5"
+              ></textarea>
+              <div class="field-hint">OCR 结果先进入这里，建议逐句核对，复杂化学表达式请裁图。</div>
+
+              <section class="ocr-monitor" aria-live="polite">
+                <div class="ocr-monitor-heading">
+                  <div class="ocr-monitor-state">
+                    <span id="ocrStateDot" class="ocr-state-dot"></span>
+                    <strong id="ocrStatus">等待运行 OCR</strong>
+                  </div>
+                  <span id="ocrElapsed" class="ocr-elapsed">00:00</span>
+                </div>
+                <div class="ocr-progress-track">
+                  <div id="ocrProgress" class="ocr-progress"></div>
+                </div>
+                <div class="ocr-monitor-footer">
+                  <span id="ocrPhase">识别阶段与耗时会显示在这里</span>
+                  <button id="copyOcrLog" class="text-button" type="button" disabled>复制日志</button>
+                </div>
+                <div id="ocrLog" class="ocr-log" role="log" aria-label="OCR 运行日志">
+                  <div class="ocr-log-empty">运行 OCR 后会记录模型加载、PDF 渲染和识别耗时。</div>
+                </div>
+              </section>
+
+              <div id="optionsField">
+                <div class="label-with-action option-label-row">
+                  <label class="field-label" for="questionOptions">选项</label>
+                  <button id="addOption" class="text-button" type="button">＋ 添加选项</button>
+                </div>
+                <div id="optionList" class="option-list"></div>
+              </div>
+
+              <label class="field-label answer-label" for="questionAnswer">正确答案</label>
+              <input
+                id="questionAnswer"
+                class="field-control"
+                type="text"
+                placeholder="例如 A 或 A,C"
+              />
+
+              <label class="field-label explanation-label" for="questionExplanation">答案解析 <span class="optional">选填</span></label>
+              <textarea
+                id="questionExplanation"
+                class="field-control explanation-input"
+                placeholder="可粘贴或手动填写答案解析"
+                rows="3"
+              ></textarea>
+            </section>
+
+            <section class="image-section">
+              <div class="label-with-action image-heading">
+                <div>
+                  <div class="section-eyebrow">FIGURES & FORMULAS</div>
+                  <h3>题目图片 <span id="imageCount" class="sub-count">0</span></h3>
+                </div>
+                <span class="crop-help">在左侧页面拖动框选</span>
+              </div>
+              <div id="imageList" class="image-list">
+                <div id="imageEmpty" class="image-empty">选中某道题后，框选页面区域添加图片</div>
+              </div>
+            </section>
+          </div>
+
+          <div class="editor-footer">
+            <button id="newQuestion" class="button button-quiet" type="button">＋ 新题目</button>
+            <button id="saveQuestion" class="button button-primary save-button" type="button">保存这道题</button>
+            <div class="export-row">
+              <span id="saveStatus" class="save-status">修改会暂存在当前页面</span>
+              <button id="exportJson" class="button button-export" type="button" disabled>导出题库 JSON</button>
+            </div>
+          </div>
+        </aside>
+      </main>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

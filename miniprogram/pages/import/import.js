@@ -1,5 +1,6 @@
 var store = require("../../utils/store");
 var parser = require("../../utils/parser");
+var docx = require("../../utils/docx");
 var sample = require("../../utils/sample");
 var shareUtil = require("../../utils/share");
 var ui = require("../../utils/ui");
@@ -82,18 +83,53 @@ Page(shareUtil.withShare({
     wx.chooseMessageFile({
       count: 1,
       type: "file",
-      extension: ["json", "txt", "md", "csv"],
+      extension: ["json", "txt", "md", "csv", "docx"],
       success: function (res) {
         var file = res.tempFiles[0];
-        try {
-          var content = wx.getFileSystemManager().readFileSync(file.path, "utf8");
-          var name = String(file.name || "").replace(/\.[^.]+$/, "");
+        var name = String(file.name || "").replace(/\.[^.]+$/, "");
+        var isWord = /\.docx$/i.test(file.name || "");
+
+        function loadContent(content, wordDocument) {
           self.setData({
             content: content,
             name: self.data.name || name,
           });
           self.doParse();
-          wx.showToast({ title: "已读取文件", icon: "success" });
+          wx.showToast({
+            title: wordDocument ? "已读取Word，请核对公式图片" : "已读取文件",
+            icon: wordDocument ? "none" : "success",
+            duration: wordDocument ? 3000 : 1500,
+          });
+        }
+
+        if (isWord) {
+          var fileSystem = wx.getFileSystemManager();
+          if (typeof fileSystem.readZipEntry !== "function") {
+            wx.showToast({ title: "请升级微信后再导入Word", icon: "none" });
+            return;
+          }
+          fileSystem.readZipEntry({
+            filePath: file.path,
+            fileName: "word/document.xml",
+            success: function (result) {
+              try {
+                var content = docx.toQuestionText(result.data);
+                if (!content.trim()) throw new Error("Word 文档中没有可读取的选择题正文");
+                loadContent(content, true);
+              } catch (err) {
+                wx.showToast({ title: err.message || "Word文档解析失败", icon: "none" });
+              }
+            },
+            fail: function () {
+              wx.showToast({ title: "Word读取失败，请确认文件格式", icon: "none" });
+            },
+          });
+          return;
+        }
+
+        try {
+          var content = wx.getFileSystemManager().readFileSync(file.path, "utf8");
+          loadContent(content, false);
         } catch (err) {
           wx.showToast({ title: "文件读取失败，请手动粘贴", icon: "none" });
         }

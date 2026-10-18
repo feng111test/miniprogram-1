@@ -5,7 +5,7 @@
 ## 功能概览
 
 - 题库列表页：展示题库数量、总题数、正确率、答题进度
-- 题库导入：支持 JSON 或文本题库导入
+- 题库导入：支持 JSON、文本及 DOCX Word 文件导入（Word 提取选择题文字）
 - 练习模式：单选、多选、判断题题型支持
 - 做题反馈：显示正确 / 错误答案、解析说明
 - 收藏功能：可收藏错题或重点题
@@ -31,16 +31,25 @@ miniprogram/
     result/
   utils/
     parser.js
+    docx.js
     sample.js
     store.js
 cloudfunctions/
   quickstartFunctions/
+tools/
+  pdf-question-importer/   # 本地 PDF OCR 与题目校对网页，独立运行
 ```
+
+### 本地 PDF 题目整理网页
+
+微信小程序目录之外另有一个独立的本地网页工具，支持逐页 OCR、手工校对题干/选项/答案，以及把化学式、反应式、结构图裁剪成题目图片。网页使用浏览器本机渲染 PDF 和 Tesseract.js 中文模型，不会把 PDF 上传云端。运行方法及导出格式见 [tools/pdf-question-importer/README.md](./tools/pdf-question-importer/README.md)。
+
+注意：网页导出的题目图片字段目前未接入小程序；需单独实现小程序图片题显示、导入和云存储后才能直接刷题。
 
 ## 主要页面说明
 
 - index：题库首页，展示题库列表和统计信息
-- import：导入题库页面，可导入 JSON / 文本题库
+- import：导入题库页面，可导入 JSON / 文本 / DOCX Word 题库
 - practice：刷题页，负责显示题目、答案选择、解析和答题状态
 - result：结果页，展示测试结果和统计信息
 
@@ -74,6 +83,7 @@ cloudfunctions/
 ## 说明
 
 - 本项目使用微信小程序原生能力和前端本地存储进行题库管理
+- Word 导入仅提取选择题文字，不支持旧版 `.doc` 文件；文档内图片和复杂公式不会作为题目图片导入，保存前请核对解析预览
 - 题库数据可由用户导入或使用示例题库
 - 项目适合作为刷题类、测试类、题库类小程序的学习和二次开发基础
 

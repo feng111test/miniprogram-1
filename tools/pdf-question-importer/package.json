@@ -1,0 +1,18 @@
+{
+  "name": "pdf-question-importer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/prepare-assets.js && vite --host 127.0.0.1",
+    "build": "node scripts/prepare-assets.js && vite build"
+  },
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "pdfjs-dist": "5.4.624",
+    "tesseract.js": "6.0.1"
+  },
+  "devDependencies": {
+    "vite": "7.2.2"
+  }
+}

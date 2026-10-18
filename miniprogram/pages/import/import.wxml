@@ -24,9 +24,10 @@
         <view class="label">题目内容</view>
         <view class="counter">{{content.length}} 字</view>
       </view>
+      <view class="help-tips">支持 JSON、文本和 .docx Word 文件。Word 仅提取选择题文字，图片和复杂公式请核对。</view>
       <textarea
         class="textarea"
-        placeholder="在此粘贴题库内容，支持 JSON 数组或纯文本格式"
+        placeholder="在此粘贴题库内容，或选择 JSON、文本、Word 文件"
         value="{{content}}"
         maxlength="-1"
         show-confirm-bar="{{false}}"

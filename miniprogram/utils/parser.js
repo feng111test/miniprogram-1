@@ -99,9 +99,9 @@ function normalizeAnswer(raw, type, keys) {
 
 function matchOptionLine(line) {
   var s = String(line || "").trim();
-  var m = s.match(/^[（(\[【]\s*([A-Za-z])\s*[）)\]】]\s*[.、:：]?\s*(.+)$/);
+  var m = s.match(/^[（(\[【]\s*([A-Za-z])\s*[）)\]】]\s*[.．、:：]?\s*(.+)$/);
   if (m) return { key: m[1].toUpperCase(), content: m[2].trim() };
-  m = s.match(/^([A-Za-z])\s*[.、:：,，)）]\s*(.+)$/);
+  m = s.match(/^([A-Za-z])\s*[.．、:：,，)）]\s*(.+)$/);
   if (m) return { key: m[1].toUpperCase(), content: m[2].trim() };
   return null;
 }
@@ -109,8 +109,34 @@ function matchOptionLine(line) {
 function parseOptionLines(text) {
   var out = [];
   String(text || "").split("\n").forEach(function (line) {
-    var m = matchOptionLine(line);
+    var s = line.trim();
+    var markers = [];
+    var markerPattern = /([A-F])\s*[.．、:：]\s*/g;
+    var marker;
+    while ((marker = markerPattern.exec(s))) {
+      markers.push({ key: marker[1], start: marker.index, end: markerPattern.lastIndex });
+    }
+
+    var inline = markers.length > 1 && markers[0].start === 0;
+    for (var i = 1; inline && i < markers.length; i++) {
+      inline = markers[i].key.charCodeAt(0) === markers[i - 1].key.charCodeAt(0) + 1;
+    }
+
+    if (inline) {
+      markers.forEach(function (item, i) {
+        var end = i + 1 < markers.length ? markers[i + 1].start : s.length;
+        var content = s.slice(item.end, end).trim();
+        if (content) out.push({ key: item.key, content: content });
+      });
+      return;
+    }
+
+    var m = matchOptionLine(s);
     if (m) out.push(m);
+    else {
+      m = s.match(/^([A-F])\s+(.+)$/);
+      if (m) out.push({ key: m[1], content: m[2].trim() });
+    }
   });
   return out;
 }
@@ -298,7 +324,10 @@ function parseBlock(block, order) {
 
   var answerRaw = "";
   var analysisLines = [];
-  var optionLines = [];
+  var weakOptionLines = [];
+  var options = [];
+  var optionKeys = {};
+  var hasStrongOption = false;
   var titleLines = [];
   var typeHint = "";
   var inAnalysis = false;
@@ -314,15 +343,44 @@ function parseBlock(block, order) {
       if (em) analysisLines.push(em);
       return;
     }
-    if (inAnalysis && !matchOptionLine(line)) {
+    if (inAnalysis) {
       analysisLines.push(line);
       return;
     }
-    if (matchOptionLine(line)) {
-      optionLines.push(line);
+    var lineOptions = parseOptionLines(line);
+    if (lineOptions.length) {
+      if (matchOptionLine(line)) {
+        hasStrongOption = true;
+        lineOptions.forEach(function (option) {
+          if (!optionKeys[option.key]) {
+            options.push(option);
+            optionKeys[option.key] = true;
+          }
+        });
+      } else {
+        weakOptionLines.push({ line: line, options: lineOptions });
+      }
       return;
     }
     titleLines.push(line);
+  });
+
+  weakOptionLines.forEach(function (candidate) {
+    var added = false;
+    candidate.options.forEach(function (option) {
+      if (!hasStrongOption || !optionKeys[option.key]) {
+        if (!optionKeys[option.key]) {
+          options.push(option);
+          optionKeys[option.key] = true;
+        }
+        added = true;
+      }
+    });
+    if (!added) titleLines.push(candidate.line);
+  });
+
+  options.sort(function (a, b) {
+    return a.key.charCodeAt(0) - b.key.charCodeAt(0);
   });
 
   var title = titleLines.join("\n").trim();
@@ -333,7 +391,6 @@ function parseBlock(block, order) {
   }
   title = title.replace(/^\s*\d+\s*[.、．:：)）]\s*/, "").trim();
 
-  var options = parseOptionLines(optionLines.join("\n"));
   var type = detectType(typeHint) || (options.length ? "single" : "judge");
 
   return buildQuestion(
