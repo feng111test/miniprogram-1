@@ -1,0 +1,19 @@
+{
+  "name": "local-exam-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node pdf-question-importer/scripts/prepare-assets.js && vite --host 127.0.0.1",
+    "build": "node pdf-question-importer/scripts/prepare-assets.js && vite build"
+  },
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "jszip": "3.10.1",
+    "pdfjs-dist": "5.4.624",
+    "tesseract.js": "6.0.1"
+  },
+  "devDependencies": {
+    "vite": "7.2.2"
+  }
+}

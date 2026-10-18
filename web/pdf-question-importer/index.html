@@ -19,22 +19,70 @@
             <small>本地整理台</small>
           </span>
         </a>
-        <div class="privacy"><span class="privacy-dot"></span>文件只在本机处理</div>
+        <div class="header-note">题库本机保存 · 打开即练</div>
         <label class="button button-primary choose-button" for="pdfInput">选择 PDF</label>
         <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
       </header>
+
+      <section id="practiceView" class="practice-view" hidden>
+        <header class="practice-header">
+          <div>
+            <div class="section-eyebrow">PRACTICE MODE</div>
+            <h1 id="practiceTitle">题目练习</h1>
+            <div id="practiceProgress" class="practice-progress"></div>
+          </div>
+          <div class="practice-header-actions">
+            <button id="practiceRestart" class="button button-quiet" type="button">重新练习</button>
+            <button id="practiceClose" class="button button-primary" type="button">返回题目整理</button>
+          </div>
+        </header>
+        <div class="practice-layout">
+          <nav id="practiceQuestionList" class="practice-question-list" aria-label="已整理的题目"></nav>
+          <article class="practice-card">
+            <div class="practice-question-meta">
+              <span id="practiceNumber"></span>
+              <span id="practiceType"></span>
+            </div>
+            <h2 id="practiceQuestion"></h2>
+            <div id="practiceImages" class="practice-images"></div>
+            <div id="practiceOptions" class="practice-options"></div>
+            <div id="practiceFeedback" class="practice-feedback" aria-live="polite" hidden></div>
+            <div class="practice-actions">
+              <button id="practicePrevious" class="button button-quiet" type="button">上一题</button>
+              <div>
+                <button id="practiceSubmit" class="button button-primary" type="button">提交答案</button>
+                <button id="practiceNext" class="button button-quiet" type="button">下一题</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
 
       <main class="workspace">
         <aside class="left-panel">
           <section class="panel-section file-section">
             <div class="section-eyebrow">SOURCE DOCUMENT</div>
             <h1>整理一份试卷</h1>
-            <p class="muted">打开本地 PDF，逐页识别并把化学式、结构图裁剪进题目。</p>
+            <p class="muted">打开 PDF 后自动识别并生成题目草稿，再逐题校对原文、页码、图片和答案。</p>
             <div id="fileCard" class="file-card empty">
               <span class="file-icon">PDF</span>
               <span id="fileName" class="file-name">尚未选择文件</span>
+              <label class="file-change" for="pdfInput">更换 PDF</label>
             </div>
-            <div id="documentMeta" class="document-meta">PDF 不会上传到服务器</div>
+            <div id="documentMeta" class="document-meta">题目会自动保存到本机题库</div>
+          </section>
+
+          <section class="panel-section bank-section">
+            <div class="section-heading">
+              <div>
+                <div class="section-eyebrow">MY BANKS</div>
+                <h2>我的题库</h2>
+              </div>
+              <span id="bankCount" class="count-badge">0</span>
+            </div>
+            <div id="bankList" class="bank-list">
+              <div class="bank-empty">整理过的题目会自动保存在这里</div>
+            </div>
           </section>
 
           <section class="panel-section page-section">
@@ -85,9 +133,9 @@
                 <span class="art-spark spark-two">·</span>
               </div>
               <h2>让试卷整理，留在你的电脑里</h2>
-              <p>导入 PDF 后可逐页 OCR、框选化学图片，题目和答案由你确认。</p>
+              <p>导入 PDF 后自动 OCR 并生成题目草稿，原文、图片和答案由你确认。</p>
               <label class="button button-primary" for="pdfInput">打开本地 PDF</label>
-              <div class="welcome-foot">支持可选文字 PDF 与扫描件 · 不自动上传任何文件</div>
+              <div class="welcome-foot">支持可选文字 PDF 与扫描件 · 整理好的题目自动存入本机题库</div>
             </div>
             <div id="pageCanvasWrap" class="page-canvas-wrap" hidden>
               <div id="pageCanvasSurface" class="page-canvas-surface">
@@ -121,11 +169,20 @@
                 <option value="judge">判断题</option>
               </select>
 
+              <label class="field-label" for="questionPage">原 PDF 页码</label>
+              <div class="question-page-control">
+                <input id="questionPage" class="field-control" type="number" min="1" step="1" placeholder="页码" />
+                <button id="viewQuestionPage" class="button button-quiet" type="button">查看原页</button>
+              </div>
+
               <div class="label-with-action">
                 <label class="field-label" for="questionTitle">题干</label>
-                <button id="runOcr" class="text-button accent" type="button" disabled>
-                  <span class="sparkle">✳</span>识别本页文字
-                </button>
+                <div class="ocr-actions">
+                  <button id="runOcr" class="text-button accent" type="button" disabled>
+                    <span class="sparkle">✳</span>识别本页
+                  </button>
+                  <button id="rerunAllOcr" class="text-button accent" type="button" disabled>重新识别整份试卷</button>
+                </div>
               </div>
               <textarea
                 id="questionTitle"
@@ -191,21 +248,31 @@
               <div id="imageList" class="image-list">
                 <div id="imageEmpty" class="image-empty">选中某道题后，框选页面区域添加图片</div>
               </div>
+              <label class="button button-quiet image-upload" for="questionImageInput">＋ 从电脑插入图片</label>
+              <input id="questionImageInput" type="file" accept="image/*" multiple hidden />
             </section>
           </div>
 
           <div class="editor-footer">
+            <div class="question-review-navigation">
+              <button id="previousQuestion" class="button button-quiet" type="button" disabled>上一题</button>
+              <button id="confirmQuestion" class="button button-primary" type="button" disabled>确认并下一题</button>
+              <button id="nextQuestion" class="button button-quiet" type="button" disabled>下一题</button>
+            </div>
             <button id="newQuestion" class="button button-quiet" type="button">＋ 新题目</button>
             <button id="saveQuestion" class="button button-primary save-button" type="button">保存这道题</button>
+            <button id="startPractice" class="button button-practice" type="button" disabled>▶ 开始刷题（0）</button>
             <div class="export-row">
-              <span id="saveStatus" class="save-status">修改会暂存在当前页面</span>
+              <span id="saveStatus" class="save-status">修改会自动存入题库</span>
               <button id="exportJson" class="button button-export" type="button" disabled>导出题库 JSON</button>
+              <label class="button button-export" for="bankInput">导入题库 JSON</label>
+              <input id="bankInput" type="file" accept=".json,application/json" hidden />
             </div>
           </div>
         </aside>
       </main>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>

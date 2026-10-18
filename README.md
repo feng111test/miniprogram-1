@@ -36,15 +36,30 @@ miniprogram/
     store.js
 cloudfunctions/
   quickstartFunctions/
-tools/
-  pdf-question-importer/   # 本地 PDF OCR 与题目校对网页，独立运行
+web/
+  index.html             # 网页工作台统一入口
+  word-quiz/             # Word 导入和刷题功能
+  pdf-question-importer/ # PDF OCR、题目校对和刷题功能
+  package.json           # 网页工具统一依赖与命令
 ```
 
-### 本地 PDF 题目整理网页
+### 本地试卷工作台（Word 与 PDF）
 
-微信小程序目录之外另有一个独立的本地网页工具，支持逐页 OCR、手工校对题干/选项/答案，以及把化学式、反应式、结构图裁剪成题目图片。网页使用浏览器本机渲染 PDF 和 Tesseract.js 中文模型，不会把 PDF 上传云端。运行方法及导出格式见 [tools/pdf-question-importer/README.md](./tools/pdf-question-importer/README.md)。
+Word 和 PDF 功能合并为同一个网页项目，统一入口位于 `web/`，与微信小程序代码分开维护。运行方式：
 
-注意：网页导出的题目图片字段目前未接入小程序；需单独实现小程序图片题显示、导入和云存储后才能直接刷题。
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+打开终端显示的网址，在顶部切换“Word 导入刷题”或“PDF 整理刷题”：
+
+- Word 模式：导入 `.docx`，提取选择题及答案解析后直接练习。
+- PDF 模式：本地 OCR/手动整理题目，保存后点击“开始刷题”，可直接练习刚整理的题目和裁剪图片；也可导出 JSON。
+- 网页项目只需在 `web/` 安装一次依赖。Word/PDF 识别与练习均在本机浏览器运行，不会上传题目文件。
+
+PDF 逐页 OCR 的使用细节见 [PDF 整理说明](./web/pdf-question-importer/README.md)，Word 识别范围见 [Word 刷题说明](./web/word-quiz/README.md)。
 
 ## 主要页面说明
 
