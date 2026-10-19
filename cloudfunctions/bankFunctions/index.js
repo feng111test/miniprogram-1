@@ -20,7 +20,7 @@ const MAX_BANKS = 100; // 单个用户题库上限
 // 部署标记：每次改完云函数上传后把这里改一下，
 // 客户端控制台打印的标记若不一致，说明云端跑的还是旧代码
 const BUILTIN_BANKS = require("./builtin-data/manifest.json").banks || [];
-const DEPLOY_TAG = "builtin-chemistry-review-3";
+const DEPLOY_TAG = "builtin-chemistry-review-4";
 
 function now() {
   return Date.now();
@@ -416,13 +416,21 @@ async function addBuiltin(id, openid) {
   const questionCount = sources.reduce(function (sum, source) { return sum + (source.questionCount || 0); }, 0);
   if (!questionCount || questionCount > MAX_QUESTIONS) throw bizError("内置题库题量无效");
 
+  let bankId = null;
   if (existing.data && existing.data[0]) {
     const bank = existing.data[0];
-    // 之前那次导入若被云函数超时打断，try/catch 的清理不会执行，
-    // 会留下 count 虚高的半截题库；这里校验题量，不完整就清掉重导
-    if ((bank.count || 0) === questionCount) return { id: bank._id, alreadyAdded: true };
-    await db.collection(COLL_QUESTION).where({ bankId: bank._id }).remove();
-    await db.collection(COLL_BANK).doc(bank._id).remove();
+    const progress = Number(bank.builtinProgress) || 0;
+    if ((bank.count || 0) === questionCount && progress >= sources.length) {
+      return { id: bank._id, alreadyAdded: true, done: true, progress: sources.length, total: sources.length };
+    }
+    if ((bank.count || 0) !== questionCount) {
+      // 老版本留下的半截题库（导入被云函数超时打断），清掉重导
+      await db.collection(COLL_QUESTION).where({ bankId: bank._id }).remove();
+      await db.collection(COLL_BANK).doc(bank._id).remove();
+    } else {
+      // 题量一致但没导完，接着上次的分卷继续，不重复写
+      bankId = bank._id;
+    }
   }
   const countRes = await db.collection(COLL_BANK).where({ _openid: openid }).count();
   if ((countRes.total || 0) >= MAX_BANKS) throw bizError("题库数量已达上限");
@@ -432,33 +440,52 @@ async function addBuiltin(id, openid) {
   }, { single: 0, multiple: 0, judge: 0, subjective: 0 });
   const questionIds = sources.reduce(function (all, source) { return all.concat(source.questionIds || []); }, []);
   if (questionIds.length !== questionCount) throw bizError("内置题库题号校验失败");
-  const ts = now();
-  const added = await db.collection(COLL_BANK).add({ data: {
-    _openid: openid, name: str(builtin.name, 30), desc: str(builtin.desc, 100),
-    count: questionCount, typeStat: typeStat, questionIds: questionIds, public: false, builtinId: id, createdAt: ts, updatedAt: ts,
-  } });
-  let order = 0;
-  try {
-    for (const source of sources) {
-      const filePath = path.join(__dirname, "builtin-data", source.file);
-      const fd = fs.openSync(filePath, "r");
-      const compressed = Buffer.allocUnsafe(source.compressedSize);
-      fs.readSync(fd, compressed, 0, source.compressedSize, source.offset);
-      fs.closeSync(fd);
-      const parsed = JSON.parse(zlib.gunzipSync(compressed).toString("utf8"));
-      const questions = (parsed.questions || []).map(function (q) {
-        return normalizeQuestion(Object.assign({}, q, { region: q.region || source.region }));
-      }).filter(Boolean);
-      await insertQuestions(added._id, questions, order);
-      order += questions.length;
-    }
-    if (order !== questionCount) throw bizError("题库导入题量校验失败");
-  } catch (err) {
-    await db.collection(COLL_QUESTION).where({ bankId: added._id }).remove();
-    await db.collection(COLL_BANK).doc(added._id).remove();
-    throw err;
+
+  let progress = 0;
+  if (!bankId) {
+    const ts = now();
+    const added = await db.collection(COLL_BANK).add({ data: {
+      _openid: openid, name: str(builtin.name, 30), desc: str(builtin.desc, 100),
+      count: questionCount, typeStat: typeStat, questionIds: questionIds, public: false, builtinId: id,
+      builtinProgress: 0, createdAt: ts, updatedAt: ts,
+    } });
+    bankId = added._id;
+  } else {
+    const current = await db.collection(COLL_BANK).doc(bankId).get();
+    progress = Number(current.data && current.data.builtinProgress) || 0;
   }
-  return { id: added._id };
+
+  // 逐卷导入并限制本次调用的耗时；没导完就带上进度返回，客户端继续调用即可续传。
+  // 注意：必须先检查耗时再导入下一个分卷，保证每次调用至少导一卷、但绝不超时
+  const startedAt = Date.now();
+  const TIME_BUDGET = 1200;
+  let advanced = 0;
+  while (progress < sources.length) {
+    if (advanced > 0 && Date.now() - startedAt > TIME_BUDGET) break;
+    const source = sources[progress];
+    const order = sources.slice(0, progress).reduce(function (sum, item) { return sum + (item.questionCount || 0); }, 0);
+    const questions = readSourceQuestions(source);
+    if (questions.length !== (source.questionCount || 0)) throw bizError("题库导入题量校验失败");
+    await insertQuestions(bankId, questions, order);
+    progress += 1;
+    advanced += 1;
+    await db.collection(COLL_BANK).doc(bankId).update({ data: { builtinProgress: progress, updatedAt: now() } });
+  }
+
+  const done = progress >= sources.length;
+  return { id: bankId, done: done, progress: progress, total: sources.length };
+}
+
+function readSourceQuestions(source) {
+  const filePath = path.join(__dirname, "builtin-data", source.file);
+  const fd = fs.openSync(filePath, "r");
+  const compressed = Buffer.allocUnsafe(source.compressedSize);
+  fs.readSync(fd, compressed, 0, source.compressedSize, source.offset);
+  fs.closeSync(fd);
+  const parsed = JSON.parse(zlib.gunzipSync(compressed).toString("utf8"));
+  return (parsed.questions || []).map(function (q) {
+    return normalizeQuestion(Object.assign({}, q, { region: q.region || source.region }));
+  }).filter(Boolean);
 }
 
 async function removeBank(id, openid) {

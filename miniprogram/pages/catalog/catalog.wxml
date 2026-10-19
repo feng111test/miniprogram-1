@@ -10,6 +10,6 @@
       <view class="name">{{item.name}}</view>
       <view class="desc">{{item.desc}}</view>
     </view>
-    <button class="add {{item.added ? 'added' : ''}}" data-index="{{index}}" bindtap="onAdd" disabled="{{item.added}}">{{item.added ? '已添加' : '添加'}}</button>
+    <view class="add {{item.added ? 'added' : ''}}" data-index="{{index}}" bindtap="onAdd">{{item.added ? '已添加' : '添加'}}</view>
   </view>
 </view>
