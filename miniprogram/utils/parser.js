@@ -39,6 +39,7 @@ function pick(obj, keys) {
 
 function detectType(text) {
   var s = String(text || "");
+  if (/subjective|short.?answer|主观|填空|简答|计算|实验题/i.test(s)) return "subjective";
   if (/不定项|多选/.test(s)) return "multiple";
   if (/判断|是非|正误/.test(s)) return "judge";
   if (/单选/.test(s)) return "single";
@@ -161,6 +162,7 @@ function parseOptions(raw) {
       return {
         key: key || fallbackKey,
         content: String(pick(item, ["content", "text", "value", "desc"]) || "").trim(),
+        formulaImages: Array.isArray(item.formulaImages) ? item.formulaImages : [],
       };
     }).filter(function (o) {
       return !!o.content;
@@ -212,6 +214,8 @@ function buildQuestion(fields, order) {
   var explanation = String(fields.explanation || "").trim();
   var keys;
 
+  if (type === "subjective") options = [];
+
   // 判断题统一使用「正确 / 错误」作为选项键，保证与答案比对一致
   if (type === "judge") {
     options = [
@@ -225,21 +229,32 @@ function buildQuestion(fields, order) {
     });
   }
 
-  var answer = normalizeAnswer(fields.answer, type, keys);
+  var answer = type === "subjective"
+    ? [String(fields.answer == null ? "" : fields.answer).trim()].filter(Boolean)
+    : normalizeAnswer(fields.answer, type, keys);
 
-  if (type !== "judge" && answer.length > 1) type = "multiple";
+  if (type !== "judge" && type !== "subjective" && answer.length > 1) type = "multiple";
 
   if (!title) return { error: "缺少题干" };
   if (!answer.length) return { error: "缺少或无法识别答案" };
-  if (type !== "judge" && !options.length) return { error: "缺少选项" };
+  if (/需核对原图|答案未提供|需人工补录|待补充|待核对/i.test(answer.join(" "))) {
+    return { error: "参考答案仍含待核对标记，请补全答案后再导入" };
+  }
+  if (type !== "judge" && type !== "subjective" && !options.length) return { error: "缺少选项" };
 
   return {
     id: "q_" + order + "_" + Math.random().toString(36).slice(2, 8),
     type: type,
+    paperNumber: fields.paperNumber || "",
+    partNumber: fields.partNumber || "",
+    questionLabel: fields.questionLabel || "",
     title: title,
+    titleImages: Array.isArray(fields.titleImages) ? fields.titleImages : [],
+    images: Array.isArray(fields.images) ? fields.images : [],
     options: options,
     answer: answer,
     explanation: explanation,
+    explanationImages: Array.isArray(fields.explanationImages) ? fields.explanationImages : [],
   };
 }
 
@@ -262,6 +277,9 @@ function fromObject(item, order) {
         "正确答案",
       ]),
       type: detectType(String(pick(item, ["type", "questionType", "question_type", "题型"]) || "")),
+      paperNumber: item.paperNumber,
+      partNumber: item.partNumber,
+      questionLabel: item.questionLabel,
       explanation: pick(item, [
         "explanation",
         "analysis",
@@ -271,6 +289,9 @@ function fromObject(item, order) {
         "remark",
         "解析",
       ]),
+      titleImages: item.titleImages,
+      images: item.images,
+      explanationImages: item.explanationImages,
     },
     order
   );
@@ -430,6 +451,43 @@ function parseBank(text) {
 
   raw = raw.trim();
   if (!raw) return { name: name, questions: [], errors: ["内容为空"] };
+
+  try {
+    var root = JSON.parse(raw);
+    if (root && root.integrity && root.integrity.valid !== true) {
+      var problems = Array.isArray(root.integrity.problems) ? root.integrity.problems.join("；") : "未通过完整性检查";
+      return {
+        name: root.name || name,
+        questions: [],
+        errors: [{ index: 0, reason: "题库完整性校验失败，禁止导入：" + problems }],
+      };
+    }
+    if (root && root.integrity && Array.isArray(root.integrity.expectedNumbers)) {
+      var rootQuestions = Array.isArray(root.questions) ? root.questions : [];
+      var expected = root.integrity.expectedNumbers.map(String);
+      var covered = Array.from(new Set(rootQuestions.map(function (question) {
+        return String(question && question.paperNumber || "");
+      }).filter(Boolean)));
+      var missing = expected.filter(function (number) { return covered.indexOf(number) === -1; });
+      var seenLabels = {};
+      var duplicateLabel = rootQuestions.some(function (question) {
+        var label = String(question && question.questionLabel || "");
+        if (!label) return true;
+        if (seenLabels[label]) return true;
+        seenLabels[label] = true;
+        return false;
+      });
+      if (rootQuestions.length !== root.integrity.questionCount || missing.length || duplicateLabel
+        || (root.integrity.problems && root.integrity.problems.length)
+        || (root.integrity.duplicateLabels && root.integrity.duplicateLabels.length)) {
+        return {
+          name: root.name || name,
+          questions: [],
+          errors: [{ index: 0, reason: "导入前完整性检查失败：题目数或卷面题号覆盖与校验记录不符" }],
+        };
+      }
+    }
+  } catch (ignoreJsonRoot) {}
 
   var questions = [];
   var errors = [];

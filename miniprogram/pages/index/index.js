@@ -110,6 +110,10 @@ Page(shareUtil.withShare({
     wx.navigateTo({ url: "/pages/import/import" });
   },
 
+  onOpenCatalog: function () {
+    wx.navigateTo({ url: "/pages/catalog/catalog" });
+  },
+
   onLoadSample: function () {
     var self = this;
     var banks = sample.BUILT_IN_BANKS || [];

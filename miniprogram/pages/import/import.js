@@ -5,7 +5,7 @@ var sample = require("../../utils/sample");
 var shareUtil = require("../../utils/share");
 var ui = require("../../utils/ui");
 
-var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断" };
+var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断", subjective: "主观" };
 
 Page(shareUtil.withShare({
   data: {
@@ -53,7 +53,7 @@ Page(shareUtil.withShare({
 
     if (res.name && !this.data.name) this.setData({ name: res.name });
 
-    var typeStat = { single: 0, multiple: 0, judge: 0 };
+    var typeStat = { single: 0, multiple: 0, judge: 0, subjective: 0 };
     res.questions.forEach(function (q) {
       if (typeStat[q.type] !== undefined) typeStat[q.type] += 1;
     });
@@ -62,6 +62,7 @@ Page(shareUtil.withShare({
       return {
         id: q.id,
         index: i + 1,
+        questionLabel: q.questionLabel,
         title: q.title,
         typeText: TYPE_TEXT[q.type] || "题目",
         answerText: q.answer.join(" "),
@@ -169,6 +170,10 @@ Page(shareUtil.withShare({
     var self = this;
     if (!this.questions.length) {
       wx.showToast({ title: "请先导入题目内容", icon: "none" });
+      return;
+    }
+    if (this.data.parsed && this.data.parsed.errors.length) {
+      wx.showToast({ title: "完整性检查未通过，请修复错误后再导入", icon: "none" });
       return;
     }
 

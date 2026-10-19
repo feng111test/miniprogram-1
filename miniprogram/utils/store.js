@@ -97,8 +97,23 @@ function getBanks() {
 
 function getBank(id) {
   if (!id) return Promise.resolve(null);
-  return call("get", { id: id });
+  var questions = [];
+  var first = null;
+  function load(offset) {
+    return call("get", { id: id, offset: offset, limit: 32 }).then(function (page) {
+      if (!first) first = page;
+      questions = questions.concat(page.questions || []);
+      if (page.hasMore && page.nextOffset > offset) return load(page.nextOffset);
+      first.questions = questions;
+      return first;
+    });
+  }
+  return load(0);
 }
+
+function getBuiltInBanks() { return call("builtins", {}); }
+function addBuiltInBank(id) { return call("addBuiltin", { id: id }); }
+function updateQuestion(bankId, qid, patch) { return call("updateQuestion", { bankId: bankId, qid: qid, patch: patch }); }
 
 function createBank(data) {
   return call("create", {
@@ -210,6 +225,9 @@ function getResult() {
 module.exports = {
   getBanks: getBanks,
   getBank: getBank,
+  getBuiltInBanks: getBuiltInBanks,
+  addBuiltInBank: addBuiltInBank,
+  updateQuestion: updateQuestion,
   createBank: createBank,
   updateBank: updateBank,
   deleteBank: deleteBank,

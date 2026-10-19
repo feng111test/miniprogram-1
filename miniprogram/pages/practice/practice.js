@@ -3,7 +3,7 @@ var parser = require("../../utils/parser");
 var shareUtil = require("../../utils/share");
 var ui = require("../../utils/ui");
 
-var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断" };
+var TYPE_TEXT = { single: "单选", multiple: "多选", judge: "判断", subjective: "主观题" };
 var MODE_TEXT = {
   sequence: "顺序练习",
   random: "随机练习",
@@ -34,6 +34,7 @@ function shuffle(arr) {
 Page(shareUtil.withShare({
   data: {
     bankId: "",
+    bankMine: false,
     mode: "sequence",
     modeText: "",
     bankName: "",
@@ -48,6 +49,8 @@ Page(shareUtil.withShare({
     showResult: false,
     answerText: "",
     selectedText: "",
+    subjectiveResponse: "",
+    subjectiveRevealed: false,
     typeText: "",
     starred: false,
     sheetVisible: false,
@@ -133,8 +136,14 @@ Page(shareUtil.withShare({
     list.forEach(function (q) {
       var rec = restore ? bank.record.answers[q.id] : null;
       session[q.id] = rec
-        ? { selected: (rec.selected || []).slice(), answered: true, correct: !!rec.correct }
-        : { selected: [], answered: false, correct: false };
+        ? {
+            selected: (rec.selected || []).slice(),
+            answered: true,
+            correct: !!rec.correct,
+            revealed: q.type === "subjective",
+            typedAnswer: "",
+          }
+        : { selected: [], answered: false, correct: false, revealed: false, typedAnswer: "" };
     });
 
     var index = restore && bank.record.lastIndex < list.length ? bank.record.lastIndex : 0;
@@ -148,6 +157,7 @@ Page(shareUtil.withShare({
       mode: mode,
       modeText: MODE_TEXT[mode] || "练习",
       bankName: bank.name,
+      bankMine: bank.mine === true,
       total: list.length,
       index: index,
       finishText: mode === "exam" ? "交卷" : "查看结果",
@@ -193,7 +203,12 @@ Page(shareUtil.withShare({
       } else if (selected.indexOf(o.key) > -1) {
         state = "checked";
       }
-      return { key: o.key, content: o.content, state: state };
+      return {
+        key: o.key,
+        content: o.content,
+        formulaImages: o.formulaImages || [],
+        state: state,
+      };
     });
 
     var statuses = this.list.map(function (item) {
@@ -220,6 +235,8 @@ Page(shareUtil.withShare({
       showResult: answered && !isExam,
       answerText: q.answer.join(" "),
       selectedText: selected.length ? selected.join(" ") : "未作答",
+      subjectiveResponse: s.typedAnswer || "",
+      subjectiveRevealed: !!s.revealed,
       typeText: TYPE_TEXT[q.type] || "题目",
       starred: this.bank.record.starIds.indexOf(q.id) > -1,
       statuses: statuses,
@@ -258,6 +275,37 @@ Page(shareUtil.withShare({
     s.correct = parser.arrEqual(s.selected, q.answer);
 
     if (!isExam) this.persist(q);
+    this.render();
+  },
+
+  onSubjectiveInput: function (e) {
+    var q = this.list[this.data.index];
+    if (!q || q.type !== "subjective") return;
+    this.session[q.id].typedAnswer = e.detail.value || "";
+    this.setData({ subjectiveResponse: this.session[q.id].typedAnswer });
+  },
+
+  onRevealSubjective: function () {
+    var q = this.list[this.data.index];
+    if (!q || q.type !== "subjective") return;
+    var s = this.session[q.id];
+    if (!String(s.typedAnswer || "").trim()) {
+      wx.showToast({ title: "请先填写你的作答", icon: "none" });
+      return;
+    }
+    s.revealed = true;
+    this.render();
+  },
+
+  onRateSubjective: function (e) {
+    var q = this.list[this.data.index];
+    if (!q || q.type !== "subjective") return;
+    var s = this.session[q.id];
+    if (!s.revealed) return;
+    s.correct = e.currentTarget.dataset.correct === "true";
+    s.selected = [s.correct ? "掌握" : "需复习"];
+    s.answered = true;
+    if (this.data.mode !== "exam") this.persist(q);
     this.render();
   },
 
@@ -355,6 +403,23 @@ Page(shareUtil.withShare({
       });
   },
 
+  onReviewQuestion: function () {
+    var self = this;
+    var question = this.list[this.data.index];
+    if (!question) return;
+    wx.navigateTo({
+      url: "/pages/review-question/review-question?bankId=" + this.data.bankId + "&qid=" + encodeURIComponent(question.id),
+      success: function (res) {
+        res.eventChannel.emit("question", { question: question, bankName: self.data.bankName });
+        res.eventChannel.on("questionUpdated", function (data) {
+          if (!data || !data.question) return;
+          self.list[self.data.index] = data.question;
+          self.render();
+        });
+      },
+    });
+  },
+
   onQuit: function () {
     var self = this;
     if (this.data.mode === "exam") {
@@ -386,9 +451,14 @@ Page(shareUtil.withShare({
       var correct = false;
 
       if (isExam) {
-        correct = s.selected.length ? parser.arrEqual(s.selected, q.answer) : false;
-        s.correct = correct;
-        s.answered = s.selected.length > 0;
+        if (q.type === "subjective") {
+          correct = !!s.correct;
+          s.answered = !!s.answered;
+        } else {
+          correct = s.selected.length ? parser.arrEqual(s.selected, q.answer) : false;
+          s.correct = correct;
+          s.answered = s.selected.length > 0;
+        }
         payload[q.id] = { selected: s.selected, correct: correct };
       } else {
         correct = !!s.correct;
@@ -403,6 +473,7 @@ Page(shareUtil.withShare({
         no: i + 1,
         type: q.type,
         typeText: TYPE_TEXT[q.type] || "题目",
+        questionLabel: q.questionLabel || "",
         title: q.title,
         options: q.options,
         selected: s.selected,

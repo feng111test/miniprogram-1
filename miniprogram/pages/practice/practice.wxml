@@ -18,12 +18,31 @@
     <view class="q-card">
       <view class="q-head">
         <view class="q-type q-type-{{question.type}}">{{typeText}}</view>
-        <view class="star {{starred ? 'on' : ''}}" bindtap="onToggleStar">
-          {{starred ? '★ 已收藏' : '☆ 收藏'}}
+        <view class="q-head-actions">
+          <text wx:if="{{question.reviewed}}" class="reviewed-badge">已校对</text>
+          <view class="star {{starred ? 'on' : ''}}" bindtap="onToggleStar">
+            {{starred ? '★ 已收藏' : '☆ 收藏'}}
+          </view>
         </view>
       </view>
 
+      <view class="paper-question-no" wx:if="{{question.questionLabel || question.region}}">{{question.region}}{{question.region && question.questionLabel ? ' · ' : ''}}{{question.questionLabel ? '原卷题号 ' + question.questionLabel : ''}}</view>
+      <view wx:if="{{bankMine}}" class="review-link" bindtap="onReviewQuestion">✎ 校对 / 修正本题</view>
       <view class="q-title">{{index + 1}}. {{question.title}}</view>
+      <image
+        wx:for="{{question.titleImages}}"
+        wx:key="index"
+        class="question-image"
+        src="{{item.dataUrl}}"
+        mode="widthFix"
+      />
+      <image
+        wx:for="{{question.images}}"
+        wx:key="index"
+        class="question-image"
+        src="{{item.dataUrl}}"
+        mode="widthFix"
+      />
 
       <view class="opt-list">
         <view
@@ -34,9 +53,41 @@
           bindtap="onSelectOption"
         >
           <view class="opt-key">{{item.key}}</view>
-          <view class="opt-content">{{item.content}}</view>
+          <view class="opt-body">
+            <view class="opt-content">{{item.content}}</view>
+            <image
+              wx:for="{{item.formulaImages}}"
+              wx:for-item="figure"
+              wx:key="index"
+              class="question-image"
+              src="{{figure.dataUrl}}"
+              mode="widthFix"
+            />
+          </view>
           <view class="opt-mark" wx:if="{{item.state === 'right'}}">✓</view>
           <view class="opt-mark" wx:if="{{item.state === 'wrong'}}">✕</view>
+        </view>
+      </view>
+
+      <view wx:if="{{question.type === 'subjective'}}" class="subjective-wrap">
+        <textarea
+          class="subjective-input"
+          value="{{subjectiveResponse}}"
+          placeholder="在这里填写你的答案"
+          maxlength="2000"
+          auto-height
+          bindinput="onSubjectiveInput"
+          disabled="{{subjectiveRevealed}}"
+        />
+        <button wx:if="{{!subjectiveRevealed}}" class="btn-primary" bindtap="onRevealSubjective">查看参考答案并自评</button>
+        <view wx:if="{{subjectiveRevealed}}" class="subjective-answer">
+          <view class="analysis-title">参考答案</view>
+          <view class="analysis-body">{{answerText}}</view>
+          <view wx:if="{{answered}}" class="feedback-line">自评：{{correct ? '掌握' : '需复习'}}</view>
+          <view wx:if="{{!answered}}" class="subjective-ratings">
+            <button class="rating-good" data-correct="true" bindtap="onRateSubjective">我已掌握</button>
+            <button class="rating-review" data-correct="false" bindtap="onRateSubjective">需要复习</button>
+          </view>
         </view>
       </view>
 
@@ -49,7 +100,7 @@
         </button>
       </view>
 
-      <view wx:if="{{showResult}}" class="feedback {{correct ? 'right' : 'wrong'}}">
+      <view wx:if="{{showResult && question.type !== 'subjective'}}" class="feedback {{correct ? 'right' : 'wrong'}}">
         <view class="feedback-head">{{correct ? '回答正确' : '回答错误'}}</view>
         <view class="feedback-line" wx:if="{{!correct}}">
           正确答案：{{answerText}} {{question.answer.length > 1 ? '（多选）' : ''}}
@@ -59,9 +110,16 @@
         </view>
       </view>
 
-      <view wx:if="{{showResult && question.explanation}}" class="analysis">
+      <view wx:if="{{showResult && (question.explanation || question.explanationImages.length)}}" class="analysis">
         <view class="analysis-title">解析</view>
-        <view class="analysis-body">{{question.explanation}}</view>
+        <view class="analysis-body" wx:if="{{question.explanation}}">{{question.explanation}}</view>
+        <image
+          wx:for="{{question.explanationImages}}"
+          wx:key="index"
+          class="question-image"
+          src="{{item.dataUrl}}"
+          mode="widthFix"
+        />
       </view>
     </view>
 

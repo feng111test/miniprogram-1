@@ -1,0 +1,30 @@
+<view class="page" wx:if="{{question}}">
+  <view class="hint">校对内容保存到你自己的题库；题目图片保留原样。{{question.region ? '来源：' + question.region : ''}} {{question.questionLabel ? '· 原卷题号 ' + question.questionLabel : ''}}</view>
+  <view class="section">
+    <view class="label">题干</view>
+    <textarea class="field large" value="{{title}}" maxlength="5000" auto-height bindinput="onTitleInput" />
+    <image wx:for="{{question.titleImages}}" wx:key="index" class="image" src="{{item.dataUrl}}" mode="widthFix" />
+    <image wx:for="{{question.images}}" wx:key="index" class="image" src="{{item.dataUrl}}" mode="widthFix" />
+  </view>
+  <view class="section" wx:if="{{options.length}}">
+    <view class="label">选项</view>
+    <view wx:for="{{options}}" wx:key="key" class="option">
+      <view class="option-key">{{item.key}}</view>
+      <view class="option-edit">
+        <textarea class="field" value="{{item.content}}" data-index="{{index}}" maxlength="4000" auto-height bindinput="onOptionInput" />
+        <image wx:for="{{item.formulaImages}}" wx:for-item="formula" wx:key="index" class="image" src="{{formula.dataUrl}}" mode="widthFix" />
+      </view>
+    </view>
+  </view>
+  <view class="section">
+    <view class="label">参考答案</view>
+    <textarea class="field" value="{{answer}}" maxlength="8000" auto-height bindinput="onAnswerInput" placeholder="例如：B；多选题可写 AC" />
+  </view>
+  <view class="section">
+    <view class="label">解析</view>
+    <textarea class="field large" value="{{explanation}}" maxlength="12000" auto-height bindinput="onExplanationInput" />
+    <image wx:for="{{question.explanationImages}}" wx:key="index" class="image" src="{{item.dataUrl}}" mode="widthFix" />
+  </view>
+  <button class="save" loading="{{saving}}" bindtap="onSave">保存校对</button>
+</view>
+<view wx:else class="hint">正在加载题目…</view>

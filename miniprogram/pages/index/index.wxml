@@ -33,7 +33,7 @@
       <view class="empty-title">还没有题库</view>
       <view class="empty-desc">支持导入 JSON 或文本格式的题目，导入后即可开始刷题</view>
       <button class="btn-primary empty-btn" bindtap="onImport">立即导入题库</button>
-      <button class="btn-ghost empty-btn" bindtap="onLoadSample">选择内置题库</button>
+      <button class="btn-ghost empty-btn" bindtap="onOpenCatalog">添加高考化学题库</button>
     </view>
 
     <view
@@ -58,6 +58,7 @@
         <text class="tag tag-single" wx:if="{{item.typeStat.single}}">单选 {{item.typeStat.single}}</text>
         <text class="tag tag-multiple" wx:if="{{item.typeStat.multiple}}">多选 {{item.typeStat.multiple}}</text>
         <text class="tag tag-judge" wx:if="{{item.typeStat.judge}}">判断 {{item.typeStat.judge}}</text>
+        <text class="tag tag-subjective" wx:if="{{item.typeStat.subjective}}">主观 {{item.typeStat.subjective}}</text>
         <text class="tag tag-wrong" wx:if="{{item.wrong}}">错题 {{item.wrong}}</text>
         <text class="tag tag-star" wx:if="{{item.star}}">收藏 {{item.star}}</text>
       </view>
@@ -68,7 +69,7 @@
     </view>
 
     <view wx:if="{{banks.length}}" class="tip">长按题库卡片可重命名 / 清空记录 / 删除</view>
-    <view wx:if="{{banks.length}}" class="template-link" bindtap="onLoadSample">＋ 添加内置题库（含高考化学）</view>
+    <view wx:if="{{banks.length}}" class="template-link" bindtap="onOpenCatalog">＋ 添加高考化学题库（混合练习 / 地区试卷）</view>
     <view class="pad"></view>
   </scroll-view>
 

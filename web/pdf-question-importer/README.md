@@ -34,6 +34,55 @@ OCR 和自动拆题仅是辅助，不保证普通文字、题号、选项及页�
 
 OCR 监视区会显示引擎/中文模型加载、PDF 页面渲染、识别阶段、进度及本次用时；运行超过一段时间没有收到引擎进度时，会显示等待提示并记录日志。日志可复制，方便排查浏览器或模型加载问题。
 
+## 批量调用 AI 转换文件夹中的 PDF
+
+仓库提供独立 Node.js 脚本 `web/scripts/convert-pdf-exams.mjs`，不修改网页。脚本先在本机提取 PDF 内嵌文字、跳过内容完全相同的重复 PDF，再按地区合并学生版和答案版；调用视觉 AI 识别题目及图示位置，在本机裁剪化学方程式、结构式、表格或其他图块，最后输出可导入的题库 JSON。为识别图块，相关学生版页面以及从答案文字匹配到的答案版页面图像会发送给 AI 服务；题库 JSON 中仅保存图块裁剪，不上传整个 PDF 文件。图片以 data URL 嵌入 JSON，含较多裁剪图的题库文件会更大。请注意页面图像会增加数据传输和 API 费用，图片/公式仍需人工校对。PDF 页面通过 `@napi-rs/canvas` 在本地渲染。
+
+智谱 GLM-4V-Flash 单次输出上限为 1024 tokens；脚本逐页识别学生版，把答案版文字作为答案/解析依据，并只附上按题号匹配到的答案页。若整页回复达到输出上限，脚本会依据页面题号逐题重试，并要求精简解析但保留题干、选项、答案及必要图块；单题仍超过上限时会明确报错，不写入不完整题库。若输入超过 16K 上下文上限，会先移除相邻页上下文、保留答案页重试，仍超限时才移除答案页后重试。修正后加 `--overwrite` 重试。
+
+从仓库根目录打开 PowerShell，先试运行统计输入范围（不会调用 AI）：
+
+```powershell
+Set-Location web
+node scripts/convert-pdf-exams.mjs --dry-run
+```
+
+安全输入 API Key 并启动转换。密钥不会写入脚本或命令历史；按当前预设默认使用智谱 GLM-4V-Flash。结果写入源 PDF 目录下的 `题库JSON` 子目录；已存在的题库默认跳过，使用 `--overwrite` 才会覆盖。
+
+```powershell
+$secureKey = Read-Host "智谱 API Key" -AsSecureString
+$env:ZHIPU_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+try {
+  node scripts/convert-pdf-exams.mjs
+} finally {
+  Remove-Item Env:ZHIPU_API_KEY -ErrorAction SilentlyContinue
+  $secureKey = $null
+}
+```
+
+也可使用 `AI_API_BASE_URL` 和 `AI_MODEL` 指定兼容接口及模型。批量调用会消耗模型额度；实际费用和可用免费额度以服务商控制台为准。生成 JSON 可在 PDF 整理页通过“导入题库”加载。
+
+若报 `无法连接 AI 接口`，可先在同一个 PowerShell 终端检查 Node.js 网络连通性（不发送 API Key，不产生模型请求）：
+
+```powershell
+node -e "fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(r=>console.log('HTTP',r.status)).catch(e=>console.error(e.cause?.code,e.cause?.message||e.message))"
+```
+
+返回 HTTP 401 表示网络已连通（未提供 Key 是预期的未授权响应）；`ENOTFOUND`、`ETIMEDOUT`、`ECONNRESET` 等则检查 DNS、防火墙或 HTTPS 代理，并在网络恢复后重新运行脚本。
+
+如果连通性测试返回 HTTP 401，但带 Key 的脚本报 `UND_ERR_SOCKET`，且本机配置了 `HTTP_PROXY` / `HTTPS_PROXY`，可让 Node.js 显式使用系统代理后再试：
+
+```powershell
+$secureKey = Read-Host "智谱 API Key" -AsSecureString
+$env:ZHIPU_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+try {
+  node --use-env-proxy scripts/convert-pdf-exams.mjs
+} finally {
+  Remove-Item Env:ZHIPU_API_KEY -ErrorAction SilentlyContinue
+  $secureKey = $null
+}
+```
+
 ## 导出格式
 
 题目结构与小程序题目字段接近，额外使用 `images` 保存页面裁剪图：

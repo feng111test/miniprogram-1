@@ -65,12 +65,16 @@
             <view class="stat-num">{{parsed.typeStat.judge}}</view>
             <view class="stat-label">判断题</view>
           </view>
+          <view class="stat-item">
+            <view class="stat-num">{{parsed.typeStat.subjective}}</view>
+            <view class="stat-label">主观题</view>
+          </view>
         </view>
 
         <view class="preview" wx:for="{{parsed.preview}}" wx:key="id">
           <view class="preview-title">
             <text class="preview-type">{{item.typeText}}</text>
-            <text class="preview-text">{{item.index}}. {{item.title}}</text>
+            <text class="preview-text">{{item.questionLabel ? ('原题' + item.questionLabel + ' · ') : ''}}{{item.index}}. {{item.title}}</text>
           </view>
           <view class="preview-answer">答案：{{item.answerText}}</view>
         </view>
@@ -118,7 +122,7 @@ C. 选项三
   }
 ]</view>
         <view class="help-tips">
-          <view>· type 取值：single（单选）/ multiple（多选）/ judge（判断）</view>
+          <view>· type 取值：single（单选）/ multiple（多选）/ judge（判断）/ subjective（主观题）</view>
           <view>· 答案支持 A、AB、A,B、1、1,2 等多种写法</view>
           <view>· 判断题答案支持：正确 / 错误 / 对 / 错 / √ / ×</view>
           <view>· 首行可用「# 题库名称」指定题库名</view>

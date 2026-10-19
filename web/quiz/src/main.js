@@ -455,14 +455,26 @@ function startPool(bankIds, scope) {
 }
 
 function clearPoolResponses() {
-  state.pool.forEach((question) => state.responses.delete(question.uid));
+  state.banks
+    .filter((bank) => state.poolBankIds.includes(bank.id))
+    .forEach((bank) => bank.questions.forEach((question) => state.responses.delete(question.uid)));
   writeProgress();
+}
+
+function rebuildPool() {
+  const pool = buildPool(state.poolBankIds, state.settings.scope);
+  return pool.length ? pool : buildPool(state.poolBankIds, "all");
 }
 
 function restartPractice() {
   if (!window.confirm("重新练习会清空本轮所选题库的答题记录，确定继续吗？")) return;
   clearPoolResponses();
-  state.pool = buildPool(state.poolBankIds, state.settings.scope);
+  state.pool = rebuildPool();
+  if (!state.pool.length) {
+    enterSetup();
+    showToast("题库中没有可练习的题目");
+    return;
+  }
   state.index = 0;
   saveSession();
   renderPractice();
@@ -593,7 +605,12 @@ ui.practiceRestart.addEventListener("click", restartPractice);
 
 ui.practiceAgain.addEventListener("click", () => {
   clearPoolResponses();
-  state.pool = buildPool(state.poolBankIds, state.settings.scope);
+  state.pool = rebuildPool();
+  if (!state.pool.length) {
+    enterSetup();
+    showToast("题库中没有可练习的题目");
+    return;
+  }
   state.index = 0;
   saveSession();
   renderPractice();

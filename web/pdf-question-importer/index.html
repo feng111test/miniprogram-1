@@ -102,7 +102,10 @@
             <div class="tip-icon">i</div>
             <div>
               <strong>识别说明</strong>
-              <p>OCR 只辅助识别普通文字。化学式、反应式和图表建议框选原图，并人工核对答案。</p>
+              <p>
+                OCR 只辅助识别普通文字；也可以直接用视觉 AI 生成题目草稿。化学式、反应式和图表仍建议框选原图，
+                并逐题人工核对答案。
+              </p>
             </div>
           </section>
         </aside>
@@ -183,6 +186,10 @@
                     <span class="sparkle">✳</span>识别本页
                   </button>
                   <button id="rerunAllOcr" class="text-button accent" type="button" disabled>重新识别整份试卷</button>
+                  <button id="aiRecognizePage" class="text-button ai" type="button" disabled>
+                    <span class="sparkle">✦</span>AI 识别本页
+                  </button>
+                  <button id="aiRecognizeAll" class="text-button ai" type="button" disabled>AI 识别整份试卷</button>
                 </div>
               </div>
               <textarea
@@ -210,6 +217,55 @@
                 </div>
                 <div id="ocrLog" class="ocr-log" role="log" aria-label="OCR 运行日志">
                   <div class="ocr-log-empty">运行 OCR 后会记录模型加载、PDF 渲染和识别耗时。</div>
+                </div>
+              </section>
+
+              <section class="ai-settings">
+                <button id="aiSettingsToggle" class="ai-settings-toggle" type="button" aria-expanded="false" aria-controls="aiSettingsBody">
+                  <span class="ai-toggle-mark">✦</span>视觉 AI 设置<span class="ai-toggle-arrow">▾</span>
+                </button>
+                <div id="aiSettingsBody" class="ai-settings-body" hidden>
+                  <label class="field-label" for="aiPreset">服务预设</label>
+                  <select id="aiPreset" class="field-control">
+                    <option value="zhipu-flash">智谱 GLM-4V-Flash（免费）</option>
+                  </select>
+                  <label class="field-label" for="aiBaseUrl">接口地址（OpenAI 兼容）</label>
+                  <input
+                    id="aiBaseUrl"
+                    class="field-control"
+                    type="text"
+                    spellcheck="false"
+                    placeholder="https://open.bigmodel.cn/api/paas/v4"
+                  />
+                  <label class="field-label" for="aiModel">视觉模型</label>
+                  <div class="ai-model-row">
+                    <input
+                      id="aiModel"
+                      class="field-control"
+                      type="text"
+                      list="aiModelOptions"
+                      spellcheck="false"
+                      placeholder="glm-4v-flash"
+                    />
+                    <button id="aiFetchModels" class="button button-quiet" type="button">拉取模型</button>
+                  </div>
+                  <datalist id="aiModelOptions"></datalist>
+                  <label class="field-label" for="aiApiKey">API Key</label>
+                  <input
+                    id="aiApiKey"
+                    class="field-control"
+                    type="password"
+                    spellcheck="false"
+                    autocomplete="off"
+                    placeholder="粘贴控制台的 API Key"
+                  />
+                  <div class="ai-settings-actions">
+                    <button id="aiSaveSettings" class="button button-quiet" type="button">保存设置</button>
+                    <button id="aiTestConnection" class="button button-quiet" type="button">测试连接</button>
+                  </div>
+                  <div id="aiSettingsHint" class="field-hint">
+                    Key 只保存在本机浏览器；免费额度与模型可用性以各家控制台为准。
+                  </div>
                 </div>
               </section>
 

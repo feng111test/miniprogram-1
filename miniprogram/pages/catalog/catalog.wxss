@@ -1,0 +1,23 @@
+.page { min-height: 100vh; padding: 28rpx; box-sizing: border-box; background: #f5f7fa; }
+.intro, .card { background: #fff; border-radius: 20rpx; padding: 28rpx; margin-bottom: 20rpx; }
+.intro-title { font-size: 34rpx; font-weight: 600; color: #202939; }
+.intro-desc, .desc { color: #667085; font-size: 24rpx; line-height: 1.6; margin-top: 12rpx; }
+.card { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.card-copy { flex: 1; min-width: 0; padding-right: 16rpx; }
+.name { font-size: 34rpx; font-weight: 600; color: #344054; line-height: 1.4; }
+.add {
+  flex: none;
+  margin: 0;
+  min-width: 136rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  padding: 0 24rpx;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+  background: #4b6ef5;
+}
+.added { color: #667085; background: #eaecf0; }
+.state { text-align: center; color: #667085; padding: 40rpx; font-size: 26rpx; }
+.error { color: #d92d20; }

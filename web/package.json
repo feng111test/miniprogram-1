@@ -8,6 +8,7 @@
     "build": "node pdf-question-importer/scripts/prepare-assets.js && vite build"
   },
   "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
     "@tesseract.js-data/chi_sim": "1.0.0",
     "jszip": "3.10.1",
     "pdfjs-dist": "5.4.624",

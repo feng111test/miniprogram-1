@@ -12,6 +12,18 @@ import {
   saveBank,
 } from "../../src/question-bank.js";
 import { downloadBankFile, readBankFile, toPdfQuestions } from "../../src/bank-file.js";
+import {
+  VISION_PRESETS,
+  VISION_PROMPT,
+  canvasToJpegDataUrl,
+  fetchVisionModels,
+  loadVisionSettings,
+  requestVisionJson,
+  saveVisionSettings,
+  testVisionConnection,
+  visionPresetOf,
+} from "../../src/vision-client.js";
+import { visionQuestionsFromPayload } from "../../src/vision-questions.js";
 
 document.documentElement.classList.toggle("embedded", new URLSearchParams(location.search).has("embedded"));
 
@@ -43,6 +55,19 @@ const elements = {
   clearCrop: byId("clearCrop"),
   runOcr: byId("runOcr"),
   rerunAllOcr: byId("rerunAllOcr"),
+  aiRecognizePage: byId("aiRecognizePage"),
+  aiRecognizeAll: byId("aiRecognizeAll"),
+  aiSettingsToggle: byId("aiSettingsToggle"),
+  aiSettingsBody: byId("aiSettingsBody"),
+  aiPreset: byId("aiPreset"),
+  aiBaseUrl: byId("aiBaseUrl"),
+  aiModel: byId("aiModel"),
+  aiModelOptions: byId("aiModelOptions"),
+  aiFetchModels: byId("aiFetchModels"),
+  aiApiKey: byId("aiApiKey"),
+  aiSaveSettings: byId("aiSaveSettings"),
+  aiTestConnection: byId("aiTestConnection"),
+  aiSettingsHint: byId("aiSettingsHint"),
   ocrStateDot: byId("ocrStateDot"),
   ocrStatus: byId("ocrStatus"),
   ocrElapsed: byId("ocrElapsed"),
@@ -182,6 +207,10 @@ function updateButtons() {
   elements.zoomIn.disabled = !hasPdf || state.zoom >= 2.5 || state.busy;
   elements.runOcr.disabled = !hasPdf || state.busy;
   elements.rerunAllOcr.disabled = !hasPdf || state.busy;
+  elements.aiRecognizePage.disabled = !hasPdf || state.busy;
+  elements.aiRecognizeAll.disabled = !hasPdf || state.busy;
+  elements.aiTestConnection.disabled = state.busy;
+  elements.aiFetchModels.disabled = state.busy;
   elements.screenshotMode.disabled = !hasPdf || state.busy;
   elements.screenshotMode.textContent = state.cropMode ? "退出截图" : "截图并插入";
   elements.screenshotMode.classList.toggle("accent", state.cropMode);
@@ -538,7 +567,7 @@ function renderQuestionList() {
       item.className = `saved-question${question.id === state.activeId ? " active" : ""}`;
       item.innerHTML = `
         <span class="saved-number">${String(index + 1).padStart(2, "0")}</span>
-        <span class="saved-copy"><strong>${safeText(question.title || "未填写题干")}</strong><small>第 ${Number(question.sourcePage) || "—"} 页 · ${question.images.length} 张图片 · ${question.answer ? `答案 ${safeText(question.answer)}` : "答案待补"}${question.reviewed ? " · 已校对" : " · 待校对"}</small></span>
+        <span class="saved-copy"><strong>${safeText(question.title || "未填写题干")}</strong><small>第 ${Number(question.sourcePage) || "—"} 页 · ${question.images.length} 张图片 · ${question.answer ? `答案 ${safeText(question.answer)}` : "答案待补"} · ${question.reviewed ? "已校对" : question.aiSuggested ? "AI 待校对" : "待校对"}${question.figureHint ? ` · ${question.images.length ? "已配图" : "建议裁图"}` : ""}</small></span>
         <span class="saved-edit">编辑</span>`;
       item.addEventListener("click", () => loadQuestion(question));
       section.append(item);
@@ -1313,6 +1342,204 @@ function splitOcrOptions(segment) {
   return { title, options };
 }
 
+async function renderPageCanvas(pageNumber) {
+  const page = await state.pdf.getPage(pageNumber);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const scale = Math.min(2.2, Math.max(1, 1400 / baseViewport.width));
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { alpha: false });
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvas, viewport }).promise;
+  return canvas;
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+async function runVision({ allPages = false } = {}) {
+  if (!state.pdf || state.busy) return;
+  const settings = loadVisionSettings();
+  if (!settings.apiKey) {
+    openVisionSettings(true);
+    showToast("请先在「视觉 AI 设置」中填写 API Key");
+    return;
+  }
+
+  const pageNumbers = allPages
+    ? Array.from({ length: state.pageCount }, (_, index) => index + 1)
+    : [state.page];
+
+  if (allPages) {
+    if (state.questions.length &&
+        !window.confirm("AI 识别整份试卷会用 AI 草稿替换当前题目和人工校对结果，确定继续吗？")) {
+      return;
+    }
+  } else {
+    const reviewed = state.questions.filter(
+      (question) => Number(question.sourcePage) === state.page && question.reviewed,
+    );
+    if (reviewed.length &&
+        !window.confirm(`第 ${state.page} 页已有 ${reviewed.length} 道校对过的题目，AI 识别会替换本页题目，确定继续吗？`)) {
+      return;
+    }
+  }
+
+  let failed = false;
+  startOcrMonitor();
+  try {
+    setBusy(true, "正在调用视觉 AI…");
+    renderOcrStatus(allPages ? "正在用视觉 AI 识别全部页面…" : "正在用视觉 AI 识别当前页面…");
+    const startedAt = performance.now();
+    const pages = await mapWithConcurrency(pageNumbers, 2, async (pageNumber, index) => {
+      setOcrPhase(`第 ${pageNumber} / ${pageNumbers.length} 页 · 生成页面图片`);
+      const canvas = await renderPageCanvas(pageNumber);
+      const imageDataUrl = canvasToJpegDataUrl(canvas, { maxWidth: 1280, quality: 0.75 });
+      setOcrPhase(`第 ${pageNumber} / ${pageNumbers.length} 页 · 等待模型返回`);
+      const payload = await requestVisionJson({ imageDataUrl, prompt: VISION_PROMPT, settings });
+      const items = visionQuestionsFromPayload(payload, pageNumber);
+      addOcrLog(`第 ${pageNumber} 页返回 ${items.length} 道题 · 图片约 ${Math.round(imageDataUrl.length / 1024)} KB`);
+      setOcrProgress(Math.round(((index + 1) / pageNumbers.length) * 100));
+      return items;
+    });
+
+    const created = pages.flat();
+    if (!created.length) {
+      setOcrPhase("视觉 AI 未识别出题目");
+      renderOcrStatus("AI 没有在这些页面识别出题目，可先放大页面或改用 OCR");
+      showToast("AI 没有识别出题目");
+      return;
+    }
+    created.forEach((question) => {
+      question.id = crypto.randomUUID();
+    });
+
+    if (allPages) {
+      state.questions = created;
+      state.activeId = null;
+      state.draft = newQuestion();
+      state.bankId = null;
+      state.bankName = state.fileName.replace(/\.pdf$/i, "");
+      state.practiceAnswers = {};
+    } else {
+      const kept = state.questions.filter((question) => Number(question.sourcePage) !== state.page);
+      if (!kept.some((question) => question.id === state.activeId)) {
+        state.activeId = null;
+        state.draft = newQuestion();
+      }
+      state.questions = [...kept, ...created].sort(
+        (left, right) => (Number(left.sourcePage) || 0) - (Number(right.sourcePage) || 0),
+      );
+    }
+
+    renderQuestionList();
+    loadQuestion(created[0]);
+    const saved = await persistBank();
+    const elapsed = formatDuration(performance.now() - startedAt);
+    elements.documentMeta.textContent = `${formatBytes(state.fileSize)} · ${state.pageCount} 页 · AI 已生成 ${created.length} 道待校对题目`;
+    elements.pageHint.textContent = `AI 生成 ${created.length} 道题，用时 ${elapsed}；逐题核对后点「确认并下一题」`;
+    setOcrPhase(`AI 识别完成 · ${created.length} 道题`);
+    showToast(saved
+      ? `AI 已生成 ${created.length} 道待校对题目，用时 ${elapsed}`
+      : `AI 已生成 ${created.length} 道题，但题库保存失败，请检查浏览器存储`);
+  } catch (error) {
+    failed = true;
+    console.error("[视觉 AI] 识别失败", error?.stack || String(error));
+    addOcrLog(`视觉 AI 失败：${error.message || String(error)}`, { error });
+    renderOcrStatus("视觉 AI 调用失败，请检查接口地址、模型名与 API Key");
+    showToast(`视觉 AI 失败：${error.message || "请重试"}`);
+  } finally {
+    stopOcrMonitor(failed ? "视觉 AI 失败" : elements.ocrStatus.textContent, { error: failed });
+    setBusy(false);
+  }
+}
+
+function setVisionSettingsOpen(open) {
+  elements.aiSettingsBody.hidden = !open;
+  elements.aiSettingsToggle.setAttribute("aria-expanded", String(open));
+  elements.aiSettingsToggle.classList.toggle("open", open);
+}
+
+function openVisionSettings(open = true) {
+  setVisionSettingsOpen(open);
+  if (open) elements.aiApiKey.focus();
+}
+
+function renderVisionSettings() {
+  const settings = loadVisionSettings();
+  elements.aiPreset.innerHTML = VISION_PRESETS
+    .map((preset) => `<option value="${safeText(preset.id)}">${safeText(preset.label)}</option>`)
+    .join("");
+  const preset = visionPresetOf(settings);
+  elements.aiPreset.value = preset?.id || "custom";
+  elements.aiBaseUrl.value = settings.baseUrl;
+  elements.aiModel.value = settings.model;
+  elements.aiApiKey.value = settings.apiKey;
+  elements.aiSettingsHint.textContent = preset?.note
+    ? `${preset.note}。Key 只保存在本机浏览器。`
+    : "Key 只保存在本机浏览器；免费额度与模型可用性以各家控制台为准。";
+}
+
+async function fetchModelOptions() {
+  elements.aiFetchModels.disabled = true;
+  try {
+    const ids = await fetchVisionModels({
+      baseUrl: elements.aiBaseUrl.value,
+      apiKey: elements.aiApiKey.value,
+    });
+    elements.aiModelOptions.innerHTML = ids
+      .map((id) => `<option value="${safeText(id)}"></option>`)
+      .join("");
+    showToast(`已获取 ${ids.length} 个可用模型，可在模型框中下拉选择`);
+  } catch (error) {
+    console.error("[视觉 AI] 拉取模型失败", error?.stack || String(error));
+    showToast(error.message || "拉取模型失败");
+  } finally {
+    elements.aiFetchModels.disabled = false;
+  }
+}
+
+function saveVisionSettingsFromInputs() {
+  saveVisionSettings({
+    baseUrl: elements.aiBaseUrl.value,
+    model: elements.aiModel.value,
+    apiKey: elements.aiApiKey.value,
+  });
+  renderVisionSettings();
+  showToast("视觉 AI 设置已保存到本机");
+}
+
+async function testVision() {
+  elements.aiTestConnection.disabled = true;
+  try {
+    await testVisionConnection({
+      baseUrl: elements.aiBaseUrl.value,
+      model: elements.aiModel.value,
+      apiKey: elements.aiApiKey.value,
+    });
+    showToast("接口可用，可以开始 AI 识别");
+  } catch (error) {
+    console.error("[视觉 AI] 连接测试失败", error?.stack || String(error));
+    showToast(`连接失败：${error.message || "请检查接口设置"}`);
+  } finally {
+    elements.aiTestConnection.disabled = false;
+  }
+}
+
 async function runOcr({ allPages = false, confirmReplace = false } = {}) {
   if (!state.pdf || state.busy) return;
   if (allPages && confirmReplace && state.questions.length &&
@@ -1495,6 +1722,23 @@ elements.cropLayer.addEventListener("pointerup", (event) => {
 elements.cropLayer.addEventListener("pointercancel", clearCrop);
 elements.runOcr.addEventListener("click", runOcr);
 elements.rerunAllOcr.addEventListener("click", () => runOcr({ allPages: true, confirmReplace: true }));
+elements.aiRecognizePage.addEventListener("click", () => runVision());
+elements.aiRecognizeAll.addEventListener("click", () => runVision({ allPages: true }));
+elements.aiSettingsToggle.addEventListener("click", () => setVisionSettingsOpen(elements.aiSettingsBody.hidden));
+elements.aiSaveSettings.addEventListener("click", saveVisionSettingsFromInputs);
+elements.aiTestConnection.addEventListener("click", testVision);
+elements.aiFetchModels.addEventListener("click", fetchModelOptions);
+elements.aiPreset.addEventListener("change", () => {
+  const preset = VISION_PRESETS.find((item) => item.id === elements.aiPreset.value);
+  if (!preset) return;
+  if (preset.id === "custom") {
+    elements.aiSettingsHint.textContent = "填写任意 OpenAI 兼容的接口地址与视觉模型名即可。";
+    return;
+  }
+  elements.aiBaseUrl.value = preset.baseUrl;
+  elements.aiModel.value = preset.model;
+  elements.aiSettingsHint.textContent = `${preset.note}。填好 API Key 后点「保存设置」。`;
+});
 elements.copyOcrLog.addEventListener("click", copyOcrLog);
 elements.questionType.addEventListener("change", () => setDraftField("type", elements.questionType.value));
 elements.questionPage.addEventListener("input", () => {
@@ -1538,4 +1782,5 @@ renderOptions(state.draft.options);
 loadQuestion(state.draft);
 updateButtons();
 renderBankLibrary();
+renderVisionSettings();
 ensurePersistence();

@@ -1,5 +1,6 @@
+// 答案标记常见写法：答案：A / 参考答案：C / 【答案】A / （答案）B
 const ANSWER_RE =
-  /(?:参考答案|正确答案|标准答案|答案)\s*[：:=＝]?\s*(?:【|\[|（|\()?\s*(正确|错误|对|错|√|×|[A-F](?:\s*(?:[,，、和及与]|\s)\s*[A-F])*)/i;
+  /(?:【|\[|（|\()?\s*(?:参考答案|正确答案|标准答案|答案)\s*(?:】|\]|）|\))?\s*[：:=＝]?\s*(?:【|\[|（|\()?\s*(正确|错误|对|错|√|×|[A-F](?:\s*(?:[,，、和及与]|\s)\s*[A-F])*)/i;
 const OPTION_RE = /^([A-F])\s*[.．、：:，,)）]?\s*(.*)$/;
 const OPTION_SPLIT_RE = /(?:^|\s)([A-F])\s*[.．、：:，,)）]\s*/g;
 const NUMBER_HEAD_RE = /^(?:第\s*)?(\d{1,3})\s*(?:题)?\s*[.．、:：]\s*(.*)$/;
@@ -52,11 +53,43 @@ function splitBlocks(lines) {
   return blocks.length ? blocks : [lines];
 }
 
+/**
+ * 找出答案所在行，并把该行切成「答案之前的正文」和「答案之后的解析」。
+ * 这样答案跟选项写在同一行（如 “D．二氧化碳 【答案】A”）时，
+ * 选项不会被整行丢掉，答案与解析也不会被吞进最后一个选项。
+ */
+function extractAnswer(lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(ANSWER_RE);
+    if (!match) continue;
+    return {
+      index,
+      value: match[1],
+      before: lines[index].slice(0, match.index).trim(),
+      after: lines[index].slice(match.index + match[0].length).trim(),
+    };
+  }
+  return null;
+}
+
+function stripExplanationPrefix(line) {
+  return line.replace(/^[【\[（(]?\s*(?:解析|答案解析|试题解析|详解)\s*[】\]）)]?\s*[：:＝=]?\s*/, "");
+}
+
 function parseBlock(lines) {
-  const answerIndex = lines.findIndex((line) => ANSWER_RE.test(line));
-  const answerMatch = answerIndex >= 0 ? lines[answerIndex].match(ANSWER_RE) : null;
-  const { answer, type } = normalizeAnswer(answerMatch?.[1]);
-  const bodyLines = answerIndex >= 0 ? lines.slice(0, answerIndex) : lines;
+  const found = extractAnswer(lines);
+  const { answer, type } = normalizeAnswer(found?.value);
+
+  const bodyLines = [];
+  const tailLines = [];
+  if (found) {
+    bodyLines.push(...lines.slice(0, found.index));
+    if (found.before) bodyLines.push(found.before);
+    if (found.after) tailLines.push(found.after);
+    tailLines.push(...lines.slice(found.index + 1));
+  } else {
+    bodyLines.push(...lines);
+  }
 
   const options = [];
   const titleLines = [];
@@ -80,12 +113,8 @@ function parseBlock(lines) {
   const title = titleLines.join("\n").trim();
   if (!title || (options.length < 2 && !answer)) return null;
 
-  const explanation = answerIndex >= 0
-    ? lines
-        .slice(answerIndex + 1)
-        .map((line) => line.replace(/^[【\[（(]\s*(?:解析|答案解析|试题解析|详解)\s*[】\]）)]?\s*[：:＝=]?\s*/, ""))
-        .join("\n")
-        .trim()
+  const explanation = found
+    ? tailLines.map(stripExplanationPrefix).join("\n").trim()
     : "";
 
   return { title, options, answer, type, explanation };

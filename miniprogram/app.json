@@ -1,8 +1,10 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/catalog/catalog",
     "pages/import/import",
     "pages/practice/practice",
+    "pages/review-question/review-question",
     "pages/result/result"
   ],
   "window": {

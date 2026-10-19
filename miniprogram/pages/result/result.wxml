@@ -48,7 +48,10 @@
           {{item.answered ? (item.correct ? '正确' : '错误') : '未作答'}}
         </view>
       </view>
-      <view class="item-title">{{item.title}}</view>
+      <view class="item-title">
+        <text wx:if="{{item.questionLabel}}" class="paper-no">原题 {{item.questionLabel}} · </text>
+        {{item.title}}
+      </view>
       <view class="item-line" wx:for="{{item.options}}" wx:for-item="opt" wx:key="key">
         <text class="opt-key {{opt.state}}">{{opt.key}}</text>
         <text class="opt-text">{{opt.content}}</text>
