@@ -36,30 +36,18 @@ miniprogram/
     store.js
 cloudfunctions/
   quickstartFunctions/
-web/
-  index.html             # 网页工作台统一入口
-  word-quiz/             # Word 导入和刷题功能
-  pdf-question-importer/ # PDF OCR、题目校对和刷题功能
-  package.json           # 网页工具统一依赖与命令
+> 网页版（题库刷题、Word / PDF 导入）已拆成独立工程，不再放在本仓库内维护。
 ```
 
-### 本地试卷工作台（Word 与 PDF）
+## 网页版（独立工程）
 
-Word 和 PDF 功能合并为同一个网页项目，统一入口位于 `web/`，与微信小程序代码分开维护。运行方式：
+网页代码已与本仓库解耦，迁移到独立工程 `quiz-web`（自带题库源数据与发布流程，不再依赖 `cloudfunctions/`）：
 
-```powershell
-cd web
-npm install
-npm run dev
-```
+- 入口：`quiz/index.html`（题库刷题）、`word-quiz/`、`pdf-question-importer/`
+- 默认题库：由 `scripts/prepare-default-bank.mjs` 从工程内的 `data/builtin-chemistry/` 生成
+- 常用命令：`npm install`、`npm run dev`、`npm run build:quiz`（只打包刷题页用于发布）
 
-打开终端显示的网址，在顶部切换“Word 导入刷题”或“PDF 整理刷题”：
-
-- Word 模式：导入 `.docx`，提取选择题及答案解析后直接练习。
-- PDF 模式：可批量选择多份 PDF；优先读取 PDF 内嵌文字，仅扫描页使用本地 OCR。题目本地保存，校对后可直接刷题或导出 JSON。
-- 网页项目只需在 `web/` 安装一次依赖。Word/PDF 识别与练习均在本机浏览器运行，不会上传题目文件。
-
-PDF 逐页 OCR 的使用细节见 [PDF 整理说明](./web/pdf-question-importer/README.md)，Word 识别范围见 [Word 刷题说明](./web/word-quiz/README.md)。
+发布：该工程自带 GitHub Pages 工作流，推送到 `main` 即自动构建发布（仓库需先在 Settings → Pages 把 Source 选为 GitHub Actions）。
 
 ## 主要页面说明
 

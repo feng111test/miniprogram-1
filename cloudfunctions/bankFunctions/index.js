@@ -45,7 +45,7 @@ try {
 } catch (err) {
   console.error("[内置题库] manifest 加载失败：", err && err.message);
 }
-const DEPLOY_TAG = "builtin-chemistry-review-8";
+const DEPLOY_TAG = "builtin-chemistry-review-11";
 
 function now() {
   return Date.now();
@@ -446,22 +446,30 @@ async function addBuiltin(id, openid) {
   let bankId = null;
   if (existing.data && existing.data[0]) {
     const bank = existing.data[0];
-    const progress = Number(bank.builtinProgress) || 0;
-    if ((bank.count || 0) === questionCount && progress >= sources.length) {
-      return { id: bank._id, alreadyAdded: true, done: true, progress: sources.length, total: sources.length };
-    }
-    if ((bank.count || 0) !== questionCount) {
-      // 老版本留下的半截题库（导入被云函数超时打断），分片清掉后重导，
-      // 一次调用只清一批，避免删几百条题目时超时
-      const removed = await removeQuestionChunk(bank._id, 100);
-      if (removed >= 100) {
-        return { id: bank._id, done: false, progress: 0, total: sources.length, cleaning: true };
-      }
-      await db.collection(COLL_QUESTION).where({ bankId: bank._id }).remove();
+    if (bank.deleting) {
+      // 上次删除被打断留下的僵尸题库：文档还在、列表已隐藏，
+      // 不清理的话这里会一直返回「已添加」，导致既看不到也加不回来
       await db.collection(COLL_BANK).doc(bank._id).remove();
     } else {
-      // 题量一致但没导完，接着上次的分卷继续，不重复写
-      bankId = bank._id;
+      const progress = Number(bank.builtinProgress) || 0;
+      if ((bank.count || 0) === questionCount && progress >= sources.length) {
+        return { id: bank._id, alreadyAdded: true, done: true, progress: sources.length, total: sources.length };
+      }
+      if ((bank.count || 0) !== questionCount) {
+        // 老版本留下的半截题库（导入被云函数超时打断），分片清掉后重导，
+        // 一次调用只清一批，避免删几百条题目时超时
+        const cleaned = await removeQuestionChunk(bank, 100);
+        if (cleaned.left > 0) {
+          return { id: bank._id, done: false, progress: 0, total: sources.length, cleaning: true };
+        }
+        await db.collection(COLL_QUESTION).where({
+          _id: _.in((bank.questionIds || []).map(function (qid) { return questionDocumentId(bank._id, qid); })),
+        }).remove();
+        await db.collection(COLL_BANK).doc(bank._id).remove();
+      } else {
+        // 题量一致但没导完，接着上次的分卷继续，不重复写
+        bankId = bank._id;
+      }
     }
   }
   const countRes = await db.collection(COLL_BANK).where({ _openid: openid }).count();
@@ -525,16 +533,27 @@ function readSourceQuestions(source) {
 /**
  * 分片删除题目。一次删掉几百条（如 639 题的混合卷）会撞云函数执行超时，
  * 题库文档删了、题目却没删干净，留下孤儿数据。
+ *
+ * 注意：这里按题目 _id 删除（_id 有索引），不能用 where({bankId}) 查询后再删——
+ * bankId 上没有索引，全表扫描一次要一两秒，必然超时。
+ * 删除进度记在题库文档的 deleteOffset 上，客户端续删即可。
  */
-async function removeQuestionChunk(bankId, limit) {
-  const page = await db.collection(COLL_QUESTION).where({ bankId: bankId }).limit(limit).get();
-  const docs = page.data || [];
-  if (!docs.length) return 0;
+async function removeQuestionChunk(bank, chunk) {
+  const qids = bank.questionIds || [];
+  const offset = Number(bank.deleteOffset) || 0;
+  const slice = qids.slice(offset, offset + chunk);
+  if (!slice.length) return { removed: 0, left: 0 };
+
   await db
     .collection(COLL_QUESTION)
-    .where({ _id: _.in(docs.map(function (doc) { return doc._id; })) })
+    .where({ _id: _.in(slice.map(function (qid) { return questionDocumentId(bank._id, qid); })) })
     .remove();
-  return docs.length;
+  const nextOffset = offset + slice.length;
+  await db
+    .collection(COLL_BANK)
+    .doc(bank._id)
+    .update({ data: { deleteOffset: nextOffset, updatedAt: now() } });
+  return { removed: slice.length, left: qids.length - nextOffset };
 }
 
 async function removeBank(id, openid) {
@@ -542,15 +561,18 @@ async function removeBank(id, openid) {
   const CHUNK = 100;
   // 先打标记，列表里立刻消失；题目分片删，没删完返回 done=false 让客户端续删
   await db.collection(COLL_BANK).doc(bank._id).update({ data: { deleting: true, updatedAt: now() } });
-  const removed = await removeQuestionChunk(bank._id, CHUNK);
-  if (removed >= CHUNK) return { id: bank._id, done: false, removed: removed };
+  const result = await removeQuestionChunk(bank, CHUNK);
+  if (result.left > 0) return { id: bank._id, done: false, removed: result.removed, left: result.left };
 
+  // 题目删完后清掉记录与题库文档；questionIds 之外的残留（老数据）兜底清一次
   await Promise.all([
-    db.collection(COLL_QUESTION).where({ bankId: bank._id }).remove(),
     db.collection(COLL_RECORD).where({ bankId: bank._id }).remove(),
+    db.collection(COLL_QUESTION).where({ _id: _.in((bank.questionIds || []).map(function (qid) {
+      return questionDocumentId(bank._id, qid);
+    })) }).remove(),
   ]);
   await db.collection(COLL_BANK).doc(bank._id).remove();
-  return { id: bank._id, done: true, removed: removed };
+  return { id: bank._id, done: true, removed: result.removed, left: 0 };
 }
 
 async function loadOwnBank(id, openid) {
