@@ -45,7 +45,7 @@ try {
 } catch (err) {
   console.error("[内置题库] manifest 加载失败：", err && err.message);
 }
-const DEPLOY_TAG = "builtin-chemistry-review-7";
+const DEPLOY_TAG = "builtin-chemistry-review-8";
 
 function now() {
   return Date.now();

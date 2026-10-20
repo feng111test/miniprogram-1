@@ -62,6 +62,7 @@ Page(shareUtil.withShare({
           b.percent = b.count ? Math.round((b.answered / b.count) * 100) : 0;
           b.timeText = formatDate(b.updatedAt);
           b.ownerText = b.mine ? "我的" : "共享";
+          b.isDefault = b.builtinId === store.DEFAULT_BUILTIN_ID;
           return b;
         });
         self.setData({

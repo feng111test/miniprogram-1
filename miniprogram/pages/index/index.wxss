@@ -249,6 +249,11 @@
   color: #16b364;
 }
 
+.tag-default {
+  background: #eef2ff;
+  color: #4b6ef5;
+}
+
 .tag-shared {
   background: #f2e9ff;
   color: #7a4bd4;

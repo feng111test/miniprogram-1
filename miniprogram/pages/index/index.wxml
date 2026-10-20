@@ -62,6 +62,7 @@
         <view class="bar-inner" style="width: {{item.percent}}%"></view>
       </view>
       <view class="card-meta">
+        <text class="tag tag-default" wx:if="{{item.isDefault}}">默认题库</text>
         <text class="tag tag-public" wx:if="{{item.public}}">已公开</text>
         <text class="tag tag-shared" wx:if="{{!item.mine}}">好友共享</text>
         <text class="tag tag-single" wx:if="{{item.typeStat.single}}">单选 {{item.typeStat.single}}</text>
