@@ -1,7 +1,15 @@
 var store = require("../../utils/store");
 
 Page({
-  data: { banks: [], loading: true, error: "", adding: false },
+  data: {
+    banks: [],
+    loading: true,
+    error: "",
+    addingId: "",
+    addingProgress: 0,
+    addingTotal: 0,
+    addingPercent: 0,
+  },
 
   onLoad: function () { this.refresh(); },
 
@@ -24,32 +32,29 @@ Page({
   onAdd: function (e) {
     var self = this;
     var item = this.data.banks[Number(e.currentTarget.dataset.index)];
-    if (!item || item.added || self.data.adding) return;
-    self.setData({ adding: true });
-    self.importBank(item.id, 0);
-  },
-
-  // 题库较大时云端会分次导入，这里按进度续传直到 done
-  importBank: function (id, rounds) {
-    var self = this;
-    wx.showLoading({ title: "添加题库中", mask: true });
-    store.addBuiltInBank(id).then(function (res) {
-      if (res && res.done === false && (res.total || 0) > 1) {
-        if (rounds + 1 > 40) throw new Error("导入超时，请重试");
-        wx.showLoading({
-          title: "添加题库中 " + (res.progress || 0) + "/" + res.total,
-          mask: true,
-        });
-        return self.importBank(id, rounds + 1);
-      }
-      wx.hideLoading();
-      self.setData({ adding: false });
+    if (!item || item.added || self.data.addingId) return;
+    // 进度展示在页面里，不用 wx.showLoading 的文案（连续调用不会刷新）
+    self.setData({
+      addingId: item.id,
+      addingProgress: 0,
+      addingTotal: 0,
+      addingPercent: 0,
+    });
+    store.addBuiltInBank(item.id, function (res) {
+      var total = res.total || 0;
+      var progress = res.progress || 0;
+      self.setData({
+        addingProgress: progress,
+        addingTotal: total,
+        addingPercent: total ? Math.round((progress / total) * 100) : 0,
+      });
+    }).then(function () {
+      self.setData({ addingId: "", addingProgress: 0, addingTotal: 0, addingPercent: 0 });
       wx.showToast({ title: "已添加到我的题库", icon: "success" });
       self.refresh();
     }).catch(function (err) {
-      wx.hideLoading();
-      self.setData({ adding: false });
-      wx.showModal({ title: "添加失败", content: err && err.message || "请稍后重试", showCancel: false });
+      self.setData({ addingId: "", addingProgress: 0, addingTotal: 0, addingPercent: 0 });
+      wx.showModal({ title: "添加失败", content: (err && err.message) || "请稍后重试", showCancel: false });
       self.refresh();
     });
   },

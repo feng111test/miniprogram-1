@@ -112,7 +112,55 @@ function getBank(id) {
 }
 
 function getBuiltInBanks() { return call("builtins", {}); }
-function addBuiltInBank(id) { return call("addBuiltin", { id: id }); }
+
+// 首次进入时自动准备的内置题库：用户无需手动添加
+var DEFAULT_BUILTIN_ID = "2026-chemistry-mixed";
+
+var importTasks = {};
+var importListeners = {};
+
+/**
+ * 添加内置题库。题库较大时云端会分次导入，这里自动续传到 done。
+ * @param {String} id
+ * @param {Function} [onProgress] 每轮回调，收到 { progress, total, done }
+ */
+function addBuiltInBank(id, onProgress) {
+  if (typeof onProgress === "function") {
+    importListeners[id] = (importListeners[id] || []).concat(onProgress);
+  }
+  // 同一题库只在云上跑一条导入链路，多个页面监听同一份进度
+  if (importTasks[id]) return importTasks[id];
+
+  function emit(res) {
+    (importListeners[id] || []).forEach(function (fn) {
+      try {
+        fn(res);
+      } catch (e) {
+        console.error("[题库导入] 进度回调异常", e);
+      }
+    });
+  }
+
+  function loop(rounds) {
+    return call("addBuiltin", { id: id }).then(function (res) {
+      emit(res);
+      if (res && res.done === false && rounds + 1 < 60) return loop(rounds + 1);
+      return res;
+    });
+  }
+
+  var task = loop(0);
+  importTasks[id] = task.then(function (res) {
+    delete importTasks[id];
+    delete importListeners[id];
+    return res;
+  }).catch(function (err) {
+    delete importTasks[id];
+    delete importListeners[id];
+    throw err;
+  });
+  return importTasks[id];
+}
 function updateQuestion(bankId, qid, patch) { return call("updateQuestion", { bankId: bankId, qid: qid, patch: patch }); }
 
 function createBank(data) {
@@ -128,8 +176,15 @@ function updateBank(id, patch) {
   return call("update", { id: id, name: patch.name, desc: patch.desc, public: patch.public });
 }
 
+// 题库题目多时云端分片删除，这里续删直到 done
 function deleteBank(id) {
-  return call("remove", { id: id });
+  function loop(rounds) {
+    return call("remove", { id: id }).then(function (res) {
+      if (res && res.done === false && rounds + 1 < 60) return loop(rounds + 1);
+      return res;
+    });
+  }
+  return loop(0);
 }
 
 /* ---------------- 练习记录 ---------------- */
@@ -223,6 +278,7 @@ function getResult() {
 }
 
 module.exports = {
+  DEFAULT_BUILTIN_ID: DEFAULT_BUILTIN_ID,
   getBanks: getBanks,
   getBank: getBank,
   getBuiltInBanks: getBuiltInBanks,

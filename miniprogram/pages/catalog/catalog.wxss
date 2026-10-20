@@ -2,7 +2,8 @@
 .intro, .card { background: #fff; border-radius: 20rpx; padding: 28rpx; margin-bottom: 20rpx; }
 .intro-title { font-size: 34rpx; font-weight: 600; color: #202939; }
 .intro-desc, .desc { color: #667085; font-size: 24rpx; line-height: 1.6; margin-top: 12rpx; }
-.card { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.card { display: flex; flex-direction: column; }
+.card-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
 .card-copy { flex: 1; min-width: 0; padding-right: 16rpx; }
 .name { font-size: 34rpx; font-weight: 600; color: #344054; line-height: 1.4; }
 .add {
@@ -18,5 +19,9 @@
   background: #4b6ef5;
 }
 .added { color: #667085; background: #eaecf0; }
+.add-progress { margin-top: 20rpx; }
+.bar { height: 8rpx; border-radius: 4rpx; background: #eaecf0; overflow: hidden; }
+.bar-inner { height: 100%; border-radius: 4rpx; background: #4b6ef5; transition: width 0.2s; }
+.add-progress-text { display: block; margin-top: 10rpx; font-size: 22rpx; color: #667085; }
 .state { text-align: center; color: #667085; padding: 40rpx; font-size: 26rpx; }
 .error { color: #d92d20; }

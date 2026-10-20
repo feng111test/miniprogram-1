@@ -27,6 +27,15 @@
     <text class="cloud-error-help" bindtap="onShowCloudHelp">查看解决步骤 ›</text>
   </view>
 
+  <view wx:if="{{preparing}}" class="preparing">
+    <view class="preparing-head">
+      <text class="preparing-title">正在准备高考化学题库</text>
+      <text class="preparing-num" wx:if="{{preparing.total > 1}}">{{preparing.progress}}/{{preparing.total}} 卷</text>
+    </view>
+    <view class="bar"><view class="bar-inner" style="width: {{preparing.percent}}%"></view></view>
+    <text class="preparing-desc">首次进入需要导入题目，导入期间可以正常使用其他功能</text>
+  </view>
+
   <scroll-view scroll-y class="list" enable-flex>
     <view wx:if="{{banks.length === 0 && !cloudError}}" class="empty">
       <view class="empty-icon">📚</view>

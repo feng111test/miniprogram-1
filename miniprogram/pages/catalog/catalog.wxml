@@ -6,10 +6,21 @@
   <view wx:if="{{loading}}" class="state">正在读取题库目录…</view>
   <view wx:if="{{error}}" class="state error" bindtap="refresh">{{error}}，点此重试</view>
   <view wx:for="{{banks}}" wx:key="id" class="card">
-    <view class="card-copy">
-      <view class="name">{{item.name}}</view>
-      <view class="desc">{{item.desc}}</view>
+    <view class="card-row">
+      <view class="card-copy">
+        <view class="name">{{item.name}}</view>
+        <view class="desc">{{item.desc}}</view>
+      </view>
+      <button
+        class="add {{item.added ? 'added' : ''}}"
+        data-index="{{index}}"
+        bindtap="onAdd"
+        disabled="{{item.added || !!addingId}}"
+      >{{addingId === item.id ? '导入中' : (item.added ? '已添加' : '添加')}}</button>
     </view>
-    <view class="add {{item.added ? 'added' : ''}}" data-index="{{index}}" bindtap="onAdd">{{item.added ? '已添加' : '添加'}}</view>
+    <view wx:if="{{addingId === item.id && addingTotal > 1}}" class="add-progress">
+      <view class="bar"><view class="bar-inner" style="width: {{addingPercent}}%"></view></view>
+      <text class="add-progress-text">已导入 {{addingProgress}}/{{addingTotal}} 卷</text>
+    </view>
   </view>
 </view>

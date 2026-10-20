@@ -19,8 +19,33 @@ const MAX_BANKS = 100; // 单个用户题库上限
 
 // 部署标记：每次改完云函数上传后把这里改一下，
 // 客户端控制台打印的标记若不一致，说明云端跑的还是旧代码
-const BUILTIN_BANKS = require("./builtin-data/manifest.json").banks || [];
-const DEPLOY_TAG = "builtin-chemistry-review-4";
+/**
+ * 定位 builtin-data 下的文件。
+ * 注意：部分部署方式（如开发者工具 CLI）会把目录分隔符打包成反斜杠，
+ * 云端是 Linux，解压后 “builtin-data\manifest.json” 变成了带反斜杠的文件名，
+ * builtin-data 目录并不存在。这里两种布局都尝试，避免换个部署方式就跑不起来。
+ */
+function resolveBuiltinFile(name) {
+  const candidates = [
+    path.join(__dirname, "builtin-data", name),
+    path.join(__dirname, "builtin-data\\" + name),
+    path.join(__dirname, name),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+}
+
+// 内置题库清单加载失败时不要让整个云函数起不来，降级为空清单并打印日志
+let BUILTIN_BANKS = [];
+try {
+  BUILTIN_BANKS = JSON.parse(fs.readFileSync(resolveBuiltinFile("manifest.json"), "utf8")).banks || [];
+  console.log("[内置题库] 清单加载成功，题库数 =", BUILTIN_BANKS.length);
+} catch (err) {
+  console.error("[内置题库] manifest 加载失败：", err && err.message);
+}
+const DEPLOY_TAG = "builtin-chemistry-review-7";
 
 function now() {
   return Date.now();
@@ -170,7 +195,9 @@ async function listBanks(openid) {
     recordMap[r.bankId] = r;
   });
 
+  // 正在删除中的题库不再出现在列表里（删除是分片的，可能跨好几次调用）
   return (bankRes.data || [])
+    .filter(function (bank) { return !bank.deleting; })
     .sort(function (a, b) {
       return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
     })
@@ -321,8 +348,8 @@ async function createBank(data, openid) {
 }
 
 async function insertQuestions(bankId, questions, startOrder) {
-  // 分批并发写入，减少串行往返；内置题库一次要写几百条，批太小会拖到云函数超时
-  const SIZE = 40;
+  // 分批并发写入，减少串行往返；内置题库一次要写几百条，批太小会拖慢导入
+  const SIZE = 80;
   for (let i = 0; i < questions.length; i += SIZE) {
     const chunk = questions.slice(i, i + SIZE);
     await Promise.all(
@@ -424,7 +451,12 @@ async function addBuiltin(id, openid) {
       return { id: bank._id, alreadyAdded: true, done: true, progress: sources.length, total: sources.length };
     }
     if ((bank.count || 0) !== questionCount) {
-      // 老版本留下的半截题库（导入被云函数超时打断），清掉重导
+      // 老版本留下的半截题库（导入被云函数超时打断），分片清掉后重导，
+      // 一次调用只清一批，避免删几百条题目时超时
+      const removed = await removeQuestionChunk(bank._id, 100);
+      if (removed >= 100) {
+        return { id: bank._id, done: false, progress: 0, total: sources.length, cleaning: true };
+      }
       await db.collection(COLL_QUESTION).where({ bankId: bank._id }).remove();
       await db.collection(COLL_BANK).doc(bank._id).remove();
     } else {
@@ -455,29 +487,31 @@ async function addBuiltin(id, openid) {
     progress = Number(current.data && current.data.builtinProgress) || 0;
   }
 
-  // 逐卷导入并限制本次调用的耗时；没导完就带上进度返回，客户端继续调用即可续传。
-  // 注意：必须先检查耗时再导入下一个分卷，保证每次调用至少导一卷、但绝不超时
+  // 每次调用只导入一个分卷就返回进度，客户端循环续传。
+  // 云端函数执行上限实测仍是 3 秒，这里不做时间预算赌注，单卷导入稳定在 1~2 秒内
   const startedAt = Date.now();
-  const TIME_BUDGET = 1200;
-  let advanced = 0;
-  while (progress < sources.length) {
-    if (advanced > 0 && Date.now() - startedAt > TIME_BUDGET) break;
+  if (progress < sources.length) {
     const source = sources[progress];
     const order = sources.slice(0, progress).reduce(function (sum, item) { return sum + (item.questionCount || 0); }, 0);
     const questions = readSourceQuestions(source);
     if (questions.length !== (source.questionCount || 0)) throw bizError("题库导入题量校验失败");
     await insertQuestions(bankId, questions, order);
     progress += 1;
-    advanced += 1;
     await db.collection(COLL_BANK).doc(bankId).update({ data: { builtinProgress: progress, updatedAt: now() } });
   }
 
   const done = progress >= sources.length;
-  return { id: bankId, done: done, progress: progress, total: sources.length };
+  return {
+    id: bankId,
+    done: done,
+    progress: progress,
+    total: sources.length,
+    elapsedMs: Date.now() - startedAt,
+  };
 }
 
 function readSourceQuestions(source) {
-  const filePath = path.join(__dirname, "builtin-data", source.file);
+  const filePath = resolveBuiltinFile(source.file);
   const fd = fs.openSync(filePath, "r");
   const compressed = Buffer.allocUnsafe(source.compressedSize);
   fs.readSync(fd, compressed, 0, source.compressedSize, source.offset);
@@ -488,14 +522,35 @@ function readSourceQuestions(source) {
   }).filter(Boolean);
 }
 
+/**
+ * 分片删除题目。一次删掉几百条（如 639 题的混合卷）会撞云函数执行超时，
+ * 题库文档删了、题目却没删干净，留下孤儿数据。
+ */
+async function removeQuestionChunk(bankId, limit) {
+  const page = await db.collection(COLL_QUESTION).where({ bankId: bankId }).limit(limit).get();
+  const docs = page.data || [];
+  if (!docs.length) return 0;
+  await db
+    .collection(COLL_QUESTION)
+    .where({ _id: _.in(docs.map(function (doc) { return doc._id; })) })
+    .remove();
+  return docs.length;
+}
+
 async function removeBank(id, openid) {
   const bank = await loadOwnBank(id, openid);
-  await db.collection(COLL_BANK).doc(bank._id).remove();
+  const CHUNK = 100;
+  // 先打标记，列表里立刻消失；题目分片删，没删完返回 done=false 让客户端续删
+  await db.collection(COLL_BANK).doc(bank._id).update({ data: { deleting: true, updatedAt: now() } });
+  const removed = await removeQuestionChunk(bank._id, CHUNK);
+  if (removed >= CHUNK) return { id: bank._id, done: false, removed: removed };
+
   await Promise.all([
     db.collection(COLL_QUESTION).where({ bankId: bank._id }).remove(),
     db.collection(COLL_RECORD).where({ bankId: bank._id }).remove(),
   ]);
-  return { id: bank._id };
+  await db.collection(COLL_BANK).doc(bank._id).remove();
+  return { id: bank._id, done: true, removed: removed };
 }
 
 async function loadOwnBank(id, openid) {
@@ -637,15 +692,18 @@ async function ensureCollections() {
   if (collectionsReady) return;
 
   const names = [COLL_BANK, COLL_QUESTION, COLL_RECORD];
-  for (let i = 0; i < names.length; i++) {
-    try {
-      await db.createCollection(names[i]);
-      console.log("[集合] 创建成功", names[i]);
-    } catch (err) {
-      // 集合已存在时会报错，打印出来便于在云日志里确认
-      console.log("[集合] 已存在或创建失败", names[i], err && err.message);
-    }
-  }
+  // 并行创建，集合已存在时各自报错即可；串行会拖慢每次冷启动
+  await Promise.all(
+    names.map(async (name) => {
+      try {
+        await db.createCollection(name);
+        console.log("[集合] 创建成功", name);
+      } catch (err) {
+        // 集合已存在时会报错，打印出来便于在云日志里确认
+        console.log("[集合] 已存在或创建失败", name, err && err.message);
+      }
+    }),
+  );
   collectionsReady = true;
 }
 

@@ -72,6 +72,7 @@ button { color: inherit; }
 .bank-badge { width: 34px; height: 34px; display: grid; flex: 0 0 34px; place-items: center; border-radius: 8px; font-size: 11px; font-weight: 700; }
 .bank-badge.word { color: #2a6f9c; background: #eaf2f8; }
 .bank-badge.pdf { color: #b86966; background: #faeeec; }
+.bank-badge.builtin { color: #176d5c; background: #e9f4ef; }
 .bank-copy { min-width: 0; display: grid; gap: 4px; }
 .bank-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .bank-copy small { color: #95a1a2; font-size: 10px; }
@@ -162,6 +163,27 @@ button { color: inherit; }
 .question-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 22px; }
 .action-right { display: flex; gap: 10px; }
 .keyboard-hint { margin: 18px 0 0; color: #9aa6a6; font-size: 10px; text-align: center; }
+
+.q-corrected { padding: 3px 9px; border-radius: 999px; color: #8a6a2d; background: #fdf3dd; font-size: 10px; }
+.correct-button { margin-left: 0; }
+
+/* 校正面板 */
+.correct-view { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 4vh 4vw; background: #16241f80; }
+.correct-panel { width: min(680px, 100%); max-height: 92vh; overflow-y: auto; padding: 20px 22px; border-radius: 12px; background: #fff; box-shadow: 0 18px 45px #16241f2e; }
+.correct-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+.correct-head h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+.correct-field { display: grid; gap: 7px; margin-bottom: 14px; }
+.correct-select { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: #4d5b56; background: #fff; font-size: 12px; }
+.correct-textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: #3f4c48; background: #fff; font: inherit; font-size: 12px; line-height: 1.7; resize: vertical; }
+.correct-options { display: grid; gap: 8px; }
+.correct-option { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.correct-option input[type=text] { min-height: 34px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; color: #3f4c48; font-size: 12px; }
+.correct-option-right { display: flex; align-items: center; gap: 5px; color: #6a7874; font-size: 11px; white-space: nowrap; }
+.correct-option-right input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.correct-remove { padding: 0 9px; min-height: 30px; border: 1px solid var(--line); border-radius: 7px; color: #9b8078; background: #fff; font-size: 11px; cursor: pointer; }
+.correct-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
+.correct-actions-right { display: flex; gap: 10px; }
+.correct-actions .button { min-height: 36px; font-size: 12px; }
 
 .toast { position: fixed; bottom: 26px; left: 50%; z-index: 30; max-width: 82vw; padding: 11px 18px; border-radius: 9px; color: #eaf5f0; background: #1f4f42; font-size: 12px; opacity: 0; transform: translate(-50%, 12px); pointer-events: none; transition: .2s ease; }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }

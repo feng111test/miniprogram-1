@@ -115,12 +115,48 @@ function fromPdf(raw, bank, index) {
   };
 }
 
+function fromBuiltin(raw, bank, index) {
+  const id = toText(raw?.id) || `builtin-${index + 1}`;
+  const type = raw?.type === "multiple" ? "multiple" : raw?.type === "judge" ? "judge" : "single";
+  const answer = normalizeKeys(raw?.answer);
+  const title = toText(raw?.title ?? raw?.stem);
+  const rawOptions = (Array.isArray(raw?.options) ? raw.options : [])
+    .map((option) => ({
+      key: toText(option?.key),
+      content: toText(option?.content ?? option?.text),
+      formulaImages: readImages(option?.formulaImages),
+    }))
+    .filter((option) => option.content);
+
+  if (!title || !answer.length) return null;
+  const options = type === "judge" ? JUDGE_OPTIONS : rawOptions;
+  if (options.length < 2) return null;
+
+  const { inline, figures } = splitTitleImages(title, readImages(raw?.titleImages));
+  return {
+    uid: `${bank.id}::${id}`,
+    id,
+    bankId: bank.id,
+    bankName: bank.name,
+    source: "builtin",
+    type,
+    title,
+    titleImages: inline,
+    images: [...readImages(raw?.images), ...figures, ...readImages(raw?.tableImage ? [raw.tableImage] : [])],
+    options: options.map((option) => ({ ...option, formulaImages: option.formulaImages || [] })),
+    answer,
+    explanation: toText(raw?.explanation),
+    explanationImages: readImages(raw?.explanationImages),
+    sourcePage: Number(raw?.sourcePage) || 0,
+  };
+}
+
 export function toQuizQuestions(bank) {
   if (!bank || !Array.isArray(bank.questions)) return [];
-  const fromPdfBank = bank.source === "pdf";
+  const converter = bank.source === "builtin" ? fromBuiltin : bank.source === "pdf" ? fromPdf : fromWord;
   const seen = new Set();
   return bank.questions
-    .map((raw, index) => (fromPdfBank ? fromPdf(raw, bank, index) : fromWord(raw, bank, index)))
+    .map((raw, index) => converter(raw, bank, index))
     .filter(Boolean)
     .filter((question) => {
       if (seen.has(question.uid)) return false;

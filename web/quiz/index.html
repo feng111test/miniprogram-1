@@ -15,13 +15,10 @@
         <span class="brand-mark">刷</span>
         <span>
           <strong>题库刷题</strong>
-          <small>WORD + PDF · 混合练习</small>
+          <small>内置真题 + WORD + PDF · 打开即练</small>
         </span>
       </a>
-      <nav class="top-links standalone-only" aria-label="前往整理工具">
-        <a class="text-link" href="/word-quiz/index.html">Word 导入</a>
-        <a class="text-link" href="/pdf-question-importer/index.html">PDF 整理</a>
-      </nav>
+
       <div class="header-note"><span class="live-dot"></span>题库本机保存 · 打开即练</div>
     </header>
 
@@ -29,9 +26,9 @@
       <section id="setupView" class="setup-view">
         <div class="setup-head">
           <p class="section-eyebrow">UNIFIED PRACTICE</p>
-          <h1>Word 和 PDF 题库，放在一起刷</h1>
+          <h1>内置真题、Word 和 PDF 题库，放在一起刷</h1>
           <p class="setup-copy">
-            勾选任意题库即可组合成一套练习：Pdf 整理出来的题目和 Word 解析卷的题目使用同一套答题体验，
+            2026 年高考化学各地真题已作为默认题库内置，打开即可刷；勾选任意题库即可组合成一套练习，
             支持随机抽题、只刷错题和本题标记。
           </p>
         </div>
@@ -57,6 +54,7 @@
 
             <div id="sourceChips" class="source-chips">
               <button class="chip active" type="button" data-source="all">全部</button>
+              <button class="chip" type="button" data-source="builtin">内置真题</button>
               <button class="chip" type="button" data-source="word">Word 题库</button>
               <button class="chip" type="button" data-source="pdf">PDF 题库</button>
             </div>
@@ -66,13 +64,9 @@
             <div id="bankEmpty" class="bank-empty" hidden>
               <strong>还没有可用的题库</strong>
               <p>
-                先到 Word 导入或 PDF 整理页面生成题库。题库保存在本机浏览器，之后回到这里就能直接混合刷题，
-                不需要重新解析。
+                页面默认加载 2026 年高考化学各地真题（16 份试卷）。这里为空说明内置真题没有加载成功，
+                请确认是用 <code>npm run dev</code> 启动的本地页面，或重新执行 <code>npm run build:quiz</code> 后再打开。
               </p>
-              <div class="empty-actions standalone-only">
-                <a class="button button-quiet" href="/word-quiz/index.html">导入 Word 试卷</a>
-                <a class="button button-quiet" href="/pdf-question-importer/index.html">整理 PDF 试卷</a>
-              </div>
             </div>
           </section>
 
@@ -151,6 +145,8 @@
               <span id="qNumber" class="q-number"></span>
               <span id="qBank" class="q-bank"></span>
               <span id="qType" class="q-type"></span>
+              <span id="qCorrected" class="q-corrected" hidden>已校正</span>
+              <button id="correctButton" class="flag-button correct-button" type="button">校正本题</button>
               <button id="flagButton" class="flag-button" type="button">标记本题</button>
             </div>
             <h2 id="qTitle" class="q-title"></h2>
@@ -168,8 +164,53 @@
         </div>
 
         <p class="keyboard-hint">
-          快捷键：← → 切换题目 · 1~6 选择选项 · Enter 提交并进入下一题 · F 标记本题
+          快捷键：← → 切换题目 · 1~6 选择选项 · Enter 提交并进入下一题 · F 标记本题 · C 校正本题
         </p>
+      </section>
+
+      <section id="correctView" class="correct-view" hidden>
+        <div class="correct-panel">
+          <header class="correct-head">
+            <div>
+              <p class="section-eyebrow">REVIEW QUESTION</p>
+              <h2 id="correctHeading">校正本题</h2>
+            </div>
+            <button id="correctClose" class="text-button" type="button">关闭</button>
+          </header>
+
+          <div class="correct-field">
+            <span class="option-label">题型</span>
+            <select id="correctType" class="correct-select">
+              <option value="single">单选题</option>
+              <option value="multiple">多选题</option>
+              <option value="judge">判断题</option>
+            </select>
+          </div>
+
+          <div class="correct-field">
+            <span class="option-label">题干</span>
+            <textarea id="correctTitle" class="correct-textarea" rows="4"></textarea>
+          </div>
+
+          <div class="correct-field">
+            <span class="option-label">选项（勾选“正确”即为答案）</span>
+            <div id="correctOptions" class="correct-options"></div>
+            <button id="correctAddOption" class="text-button" type="button">＋ 增加选项</button>
+          </div>
+
+          <div class="correct-field">
+            <span class="option-label">解析</span>
+            <textarea id="correctExplanation" class="correct-textarea" rows="4"></textarea>
+          </div>
+
+          <footer class="correct-actions">
+            <button id="correctReset" class="button button-quiet" type="button">恢复原题</button>
+            <div class="correct-actions-right">
+              <button id="correctCancel" class="button button-quiet" type="button">取消</button>
+              <button id="correctSave" class="button button-primary" type="button">保存校正</button>
+            </div>
+          </footer>
+        </div>
       </section>
     </main>
 

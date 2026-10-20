@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node pdf-question-importer/scripts/prepare-assets.js && vite --host 127.0.0.1",
-    "build": "node pdf-question-importer/scripts/prepare-assets.js && vite build"
+    "dev": "node scripts/prepare-default-bank.mjs && node pdf-question-importer/scripts/prepare-assets.js && vite --host 127.0.0.1",
+    "build": "node scripts/prepare-default-bank.mjs && node pdf-question-importer/scripts/prepare-assets.js && vite build",
+    "build:quiz": "node scripts/prepare-default-bank.mjs && vite build --config vite.quiz.config.js",
+    "preview:quiz": "vite preview --config vite.quiz.config.js --outDir dist-quiz --host 127.0.0.1"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.100",

@@ -21,6 +21,7 @@ Page(shareUtil.withShare({
     shareTip: "",
     loading: false,
     cloudError: "",
+    preparing: null,
   },
 
   onLoad: function (options) {
@@ -69,6 +70,7 @@ Page(shareUtil.withShare({
           loading: false,
           cloudError: "",
         });
+        self.prepareDefaultBank(banks);
       })
       .catch(function (err) {
         self.setData({
@@ -82,6 +84,36 @@ Page(shareUtil.withShare({
 
   onRetry: function () {
     this.refresh();
+  },
+
+  /**
+   * 高考化学题库作为默认题库：还没有就后台自动导入，用户不必手动添加。
+   * 导入走云端分卷续传，这里只展示进度，完成后刷新列表。
+   */
+  prepareDefaultBank: function (list) {
+    var self = this;
+    if (self._prepareTried) return;
+    for (var i = 0; i < (list || []).length; i++) {
+      if (list[i].builtinId === store.DEFAULT_BUILTIN_ID) return;
+    }
+    self._prepareTried = true;
+    self.setData({ preparing: { progress: 0, total: 0, percent: 0 } });
+
+    store.addBuiltInBank(store.DEFAULT_BUILTIN_ID, function (res) {
+      var total = res.total || 0;
+      var progress = res.progress || 0;
+      self.setData({
+        preparing: { progress: progress, total: total, percent: total ? Math.round((progress / total) * 100) : 0 },
+      });
+    }).then(function () {
+      self.setData({ preparing: null });
+      wx.showToast({ title: "高考化学题库已就绪", icon: "success" });
+      return self.refresh();
+    }).catch(function (err) {
+      console.error("[默认题库] 自动导入失败", err);
+      self.setData({ preparing: null });
+      wx.showToast({ title: ("内置题库导入失败：" + ((err && err.message) || "请稍后重试")), icon: "none" });
+    });
   },
 
   onShowCloudHelp: function () {
@@ -240,12 +272,15 @@ Page(shareUtil.withShare({
     var meta = this.findMeta(id);
     if (!meta) return;
 
+    // 自动导入的默认题库不提供删除：删掉后下次进入又会自动导回来
+    var isDefault = meta.builtinId === store.DEFAULT_BUILTIN_ID;
+
     var items = [];
     if (meta.mine) {
       items.push("重命名");
       items.push(meta.public ? "设为私密" : "设为公开");
       items.push("清空练习记录");
-      items.push("删除题库");
+      if (!isDefault) items.push("删除题库");
     } else {
       items.push("清空练习记录");
     }

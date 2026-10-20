@@ -2,6 +2,12 @@ import "./styles.css";
 import { ensurePersistence, formatSavedAt, listBanks } from "../../src/question-bank.js";
 import { escapeHtml, renderFormulaContent } from "../../src/question-text.js";
 import { sameAnswer, shuffle, toQuizQuestions } from "../../src/quiz-model.js";
+import {
+  applyCorrections,
+  clearCorrection,
+  getCorrection,
+  saveCorrection,
+} from "../../src/question-correction.js";
 
 document.documentElement.classList.toggle("embedded", new URLSearchParams(location.search).has("embedded"));
 
@@ -40,6 +46,19 @@ const ui = {
   qNumber: byId("qNumber"),
   qBank: byId("qBank"),
   qType: byId("qType"),
+  qCorrected: byId("qCorrected"),
+  correctButton: byId("correctButton"),
+  correctView: byId("correctView"),
+  correctHeading: byId("correctHeading"),
+  correctClose: byId("correctClose"),
+  correctType: byId("correctType"),
+  correctTitle: byId("correctTitle"),
+  correctOptions: byId("correctOptions"),
+  correctAddOption: byId("correctAddOption"),
+  correctExplanation: byId("correctExplanation"),
+  correctReset: byId("correctReset"),
+  correctCancel: byId("correctCancel"),
+  correctSave: byId("correctSave"),
   qTitle: byId("qTitle"),
   qImages: byId("qImages"),
   qOptions: byId("qOptions"),
@@ -59,6 +78,7 @@ const state = {
   pool: [],
   poolBankIds: [],
   index: 0,
+  correcting: null,
   responses: new Map(),
   selectionReady: false,
   toastTimer: null,
@@ -171,16 +191,59 @@ function loadSettings() {
   };
 }
 
+async function readBuiltinFile(url, gzip) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!gzip) return response.json();
+  if (typeof DecompressionStream !== "function" || !response.body) {
+    throw new Error("浏览器不支持 gzip 流式解压");
+  }
+  return new Response(response.body.pipeThrough(new DecompressionStream("gzip"))).json();
+}
+
+async function loadBuiltinBanks() {
+  try {
+    // 题库由 scripts/prepare-default-bank.mjs 预先生成。这里相对页面地址定位文件，
+    // 站点部署在子路径（如 https://host/xxx/）时也能取到。
+    const base = new URL("../builtin-data/2026-chemistry-banks", document.baseURI).href;
+    let data = null;
+    try {
+      data = await readBuiltinFile(`${base}.json.gz?v=2`, true);
+    } catch (error) {
+      console.warn("[题库] 压缩包读取失败，退回纯文本", error);
+    }
+    if (!data) data = await readBuiltinFile(`${base}.json?v=2`, false);
+    const list = Array.isArray(data?.banks) ? data.banks : [];
+    return list
+      .filter((bank) => bank && bank.id && Array.isArray(bank.questions) && bank.questions.length)
+      .map((bank) => ({
+        id: bank.id,
+        name: bank.name || "2026年高考化学真题",
+        source: "builtin",
+        updatedAt: data.generatedAt || Date.now(),
+        questions: bank.questions,
+      }));
+  } catch (error) {
+    console.warn("[题库] 默认高考化学内置题库加载失败", error);
+    showToast(`内置真题未加载：${error.message || "请重新运行 npm run dev 后刷新"}`);
+    return [];
+  }
+}
+
 async function refreshBanks() {
-  const banks = await listBanks();
-  state.banks = banks
-    .filter((bank) => bank.source === "word" || bank.source === "pdf")
+  const [banks, builtins] = await Promise.all([listBanks(), loadBuiltinBanks()]);
+  const mergedBanks = [
+    ...builtins,
+    ...banks.filter((bank) => bank.source === "word" || bank.source === "pdf"),
+  ];
+  state.banks = mergedBanks
     .map((bank) => ({
       id: bank.id,
       name: bank.name || "未命名题库",
       source: bank.source,
-      updatedAt: bank.updatedAt,
-      questions: toQuizQuestions(bank),
+      updatedAt: bank.updatedAt || Date.now(),
+      // 内置真题与本地题库都叠加上本机校正过的字段
+      questions: applyCorrections(toQuizQuestions(bank)),
     }))
     .filter((bank) => bank.questions.length);
 }
@@ -189,14 +252,16 @@ function bankStats(bank) {
   let answered = 0;
   let correct = 0;
   let flagged = 0;
+  let corrected = 0;
   bank.questions.forEach((question) => {
+    if (question.corrected) corrected += 1;
     const response = state.responses.get(question.uid);
     if (!response) return;
     if (response.submitted) answered += 1;
     if (response.submitted && response.correct) correct += 1;
     if (response.flagged) flagged += 1;
   });
-  return { answered, correct, flagged };
+  return { answered, correct, flagged, corrected };
 }
 
 function inScope(question, scope) {
@@ -239,13 +304,19 @@ function renderSetup() {
     .map((bank) => {
       const stats = bankStats(bank);
       const picked = state.selected.has(bank.id);
+      const badge =
+        bank.source === "word"
+          ? { className: "word", label: "W" }
+          : bank.source === "builtin"
+            ? { className: "builtin", label: "内" }
+            : { className: "pdf", label: "P" };
       return `<div class="bank-card${picked ? " picked" : ""}">
         <label class="bank-pick">
           <input type="checkbox" data-id="${escapeHtml(bank.id)}" ${picked ? "checked" : ""} />
-          <span class="bank-badge ${bank.source === "word" ? "word" : "pdf"}">${bank.source === "word" ? "W" : "P"}</span>
+          <span class="bank-badge ${badge.className}">${badge.label}</span>
           <span class="bank-copy">
             <strong>${escapeHtml(bank.name)}</strong>
-            <small>${bank.questions.length} 题 · 已答 ${stats.answered} · 答对 ${stats.correct}${stats.flagged ? ` · 标记 ${stats.flagged}` : ""} · 更新于 ${escapeHtml(formatSavedAt(bank.updatedAt))}</small>
+            <small>${bank.questions.length} 题 · 已答 ${stats.answered} · 答对 ${stats.correct}${stats.flagged ? ` · 标记 ${stats.flagged}` : ""}${stats.corrected ? ` · 校正 ${stats.corrected}` : ""} · 更新于 ${escapeHtml(formatSavedAt(bank.updatedAt))}</small>
           </span>
         </label>
         <button class="bank-solo" type="button" data-id="${escapeHtml(bank.id)}">单独刷</button>
@@ -268,8 +339,13 @@ function renderSetup() {
   const pickedBanks = state.banks.filter((bank) => state.selected.has(bank.id));
   const wordCount = pickedBanks.filter((bank) => bank.source === "word").length;
   const pdfCount = pickedBanks.filter((bank) => bank.source === "pdf").length;
+  const builtinCount = pickedBanks.filter((bank) => bank.source === "builtin").length;
+  const pickedParts = [];
+  if (builtinCount) pickedParts.push(`内置真题 ${builtinCount} 个`);
+  if (wordCount) pickedParts.push(`Word ${wordCount} 个`);
+  if (pdfCount) pickedParts.push(`PDF ${pdfCount} 个`);
   ui.pickSummary.textContent = pickedBanks.length
-    ? `已选 ${pickedBanks.length} 个题库：Word ${wordCount} 个 · PDF ${pdfCount} 个`
+    ? `已选 ${pickedBanks.length} 个题库：${pickedParts.join(" · ")}`
     : "还没有选择题库";
 
   ui.startPractice.disabled = pool.length === 0;
@@ -308,9 +384,12 @@ function renderPractice() {
   ui.progressBar.style.width = `${total ? ((state.index + 1) / total) * 100 : 0}%`;
 
   ui.qNumber.textContent = `第 ${state.index + 1} 题`;
-  ui.qBank.textContent = `${question.bankName} · ${question.source === "word" ? "Word 题库" : "PDF 题库"}`;
+  const sourceLabel =
+    question.source === "word" ? "Word 题库" : question.source === "builtin" ? "内置真题" : "PDF 题库";
+  ui.qBank.textContent = `${question.bankName} · ${sourceLabel}`;
   ui.qType.textContent =
     question.type === "multiple" ? "多选题" : question.type === "judge" ? "判断题" : "单选题";
+  ui.qCorrected.hidden = !question.corrected;
   ui.flagButton.classList.toggle("active", response.flagged);
   ui.flagButton.textContent = response.flagged ? "已标记" : "标记本题";
   ui.qTitle.innerHTML = renderFormulaContent(question.title, question.titleImages);
@@ -481,6 +560,138 @@ function restartPractice() {
   showToast("已清空答题记录，重新开始");
 }
 
+/* ---------------- 题目校正 ---------------- */
+
+const OPTION_KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const JUDGE_KEYS = ["正确", "错误"];
+
+function correctOptionRows(options, answer) {
+  return options
+    .map(
+      (option) => `<div class="correct-option">
+        <input type="text" class="correct-option-key" value="${escapeHtml(option.key)}" aria-label="选项标号" />
+        <input type="text" class="correct-option-content" value="${escapeHtml(option.content)}" aria-label="选项内容" />
+        <label class="correct-option-right"><input type="checkbox" class="correct-option-answer" ${answer.includes(option.key) ? "checked" : ""} />正确</label>
+        <button class="correct-remove" type="button">删除</button>
+      </div>`,
+    )
+    .join("");
+}
+
+function openCorrector() {
+  const question = state.pool[state.index];
+  if (!question) return;
+  state.correcting = question;
+  ui.correctHeading.textContent = `校正本题 · ${question.bankName}`;
+  ui.correctType.value = question.type;
+  ui.correctTitle.value = question.title;
+  ui.correctExplanation.value = question.explanation;
+  ui.correctOptions.innerHTML = correctOptionRows(question.options, question.answer);
+  ui.correctView.hidden = false;
+  ui.correctTitle.focus();
+}
+
+function closeCorrector() {
+  state.correcting = null;
+  ui.correctView.hidden = true;
+}
+
+function readCorrectorForm() {
+  const rows = [...ui.correctOptions.querySelectorAll(".correct-option")];
+  const options = [];
+  const answer = [];
+  rows.forEach((row) => {
+    const key = row.querySelector(".correct-option-key").value.trim();
+    const content = row.querySelector(".correct-option-content").value.trim();
+    if (!key && !content) return;
+    const finalKey = key || OPTION_KEYS[options.length] || `选项${options.length + 1}`;
+    options.push({ key: finalKey, content });
+    if (row.querySelector(".correct-option-answer").checked) answer.push(finalKey);
+  });
+  return {
+    type: ui.correctType.value,
+    title: ui.correctTitle.value.trim(),
+    explanation: ui.correctExplanation.value.trim(),
+    options,
+    answer: [...new Set(answer)],
+  };
+}
+
+function saveCorrector() {
+  const question = state.correcting;
+  if (!question) return;
+  const form = readCorrectorForm();
+  if (!form.title) {
+    showToast("题干不能为空");
+    return;
+  }
+  if (form.options.length < 2) {
+    showToast("至少保留两个选项");
+    return;
+  }
+  if (!form.answer.length) {
+    showToast("请勾选正确答案");
+    return;
+  }
+
+  const record = getCorrection(question.uid);
+  const original =
+    record?.original ||
+    {
+      type: question.type,
+      title: question.title,
+      options: question.options,
+      answer: question.answer,
+      explanation: question.explanation,
+    };
+
+  // 选项里可能带公式图片，按选项标号保留下来
+  const images = new Map(question.options.map((option) => [option.key, option.formulaImages || []]));
+  saveCorrection(question.uid, form, original);
+  question.type = form.type;
+  question.title = form.title;
+  question.options = form.options.map((option) => ({ ...option, formulaImages: images.get(option.key) || [] }));
+  question.answer = form.answer;
+  question.explanation = form.explanation;
+  question.corrected = true;
+
+  // 已提交的题目按新答案重新判分
+  const response = state.responses.get(question.uid);
+  if (response?.submitted) {
+    response.correct = sameAnswer(response.selected, question.answer);
+  }
+  saveProgress();
+  closeCorrector();
+  renderPractice();
+  showToast("已保存校正，本题按校正后的内容判分");
+}
+
+function resetCorrector() {
+  const question = state.correcting;
+  if (!question) return;
+  const record = getCorrection(question.uid);
+  if (!record?.original) {
+    showToast("这道题还没有校正记录");
+    return;
+  }
+  const source = record.original;
+  question.type = source.type || question.type;
+  question.title = source.title ?? question.title;
+  question.options = source.options || question.options;
+  question.answer = source.answer || question.answer;
+  question.explanation = source.explanation ?? question.explanation;
+  question.corrected = false;
+  clearCorrection(question.uid);
+  const response = state.responses.get(question.uid);
+  if (response?.submitted) {
+    response.correct = sameAnswer(response.selected, question.answer);
+  }
+  saveProgress();
+  closeCorrector();
+  renderPractice();
+  showToast("已恢复原题");
+}
+
 function submitCurrent() {
   const question = state.pool[state.index];
   const response = responseFor(question);
@@ -591,6 +802,40 @@ ui.flagButton.addEventListener("click", () => {
   showToast(response.flagged ? "已标记本题，可在选题页按标记筛选" : "已取消标记");
 });
 
+ui.correctButton.addEventListener("click", openCorrector);
+ui.correctClose.addEventListener("click", closeCorrector);
+ui.correctCancel.addEventListener("click", closeCorrector);
+ui.correctSave.addEventListener("click", saveCorrector);
+ui.correctReset.addEventListener("click", resetCorrector);
+
+ui.correctAddOption.addEventListener("click", () => {
+  const index = ui.correctOptions.querySelectorAll(".correct-option").length;
+  const row = document.createElement("div");
+  row.className = "correct-option";
+  row.innerHTML = `<input type="text" class="correct-option-key" value="${escapeHtml(
+    OPTION_KEYS[index] || `选项${index + 1}`,
+  )}" aria-label="选项标号" />
+    <input type="text" class="correct-option-content" value="" aria-label="选项内容" />
+    <label class="correct-option-right"><input type="checkbox" class="correct-option-answer" />正确</label>
+    <button class="correct-remove" type="button">删除</button>`;
+  ui.correctOptions.appendChild(row);
+});
+
+ui.correctOptions.addEventListener("click", (event) => {
+  const button = event.target.closest(".correct-remove");
+  if (!button) return;
+  button.closest(".correct-option")?.remove();
+});
+
+ui.correctType.addEventListener("change", () => {
+  if (ui.correctType.value !== "judge") return;
+  const checked = [...ui.correctOptions.querySelectorAll(".correct-option-answer")].findIndex((input) => input.checked);
+  ui.correctOptions.innerHTML = correctOptionRows(
+    JUDGE_KEYS.map((key) => ({ key, content: key })),
+    checked === 0 ? ["正确"] : checked === 1 ? ["错误"] : [],
+  );
+});
+
 ui.practiceExit.addEventListener("click", () => {
   flushRecords();
   enterSetup();
@@ -634,6 +879,11 @@ ui.practiceWrongOnly.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (!ui.correctView.hidden) {
+    // 校正面板打开时不再响应刷题快捷键，Esc 关闭面板
+    if (event.key === "Escape") closeCorrector();
+    return;
+  }
   if (ui.practiceView.hidden) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   const question = state.pool[state.index];
@@ -661,6 +911,11 @@ document.addEventListener("keydown", (event) => {
     ui.flagButton.click();
     return;
   }
+  if (event.key === "c" || event.key === "C") {
+    event.preventDefault();
+    openCorrector();
+    return;
+  }
   const digit = Number(event.key);
   if (Number.isInteger(digit) && digit >= 1 && digit <= 9) {
     const response = responseFor(question);
@@ -679,6 +934,16 @@ async function init() {
   await refreshBanks();
   const resumed = await resumeSession();
   if (resumed) {
+    // 恢复的是上一次的练习池（可能只有某一套卷），默认真题仍然全部预选，
+    // 点“返回选题”就能直接刷全部试卷
+    const builtinIds = state.banks.filter((bank) => bank.source === "builtin").map((bank) => bank.id);
+    builtinIds.forEach((id) => state.selected.add(id));
+    const builtinCount = state.banks
+      .filter((bank) => bank.source === "builtin")
+      .reduce((sum, bank) => sum + bank.questions.length, 0);
+    if (builtinCount) {
+      showToast(`已恢复上次练习（${state.pool.length} 题）· 返回选题可刷全部 ${builtinCount} 道默认真题`);
+    }
     enterPractice();
   } else {
     if (!state.selectionReady && !state.selected.size) {
