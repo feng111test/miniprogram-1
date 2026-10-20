@@ -45,7 +45,7 @@ try {
 } catch (err) {
   console.error("[内置题库] manifest 加载失败：", err && err.message);
 }
-const DEPLOY_TAG = "builtin-chemistry-review-11";
+const DEPLOY_TAG = "builtin-chemistry-review-12";
 
 function now() {
   return Date.now();
@@ -433,10 +433,33 @@ async function getBuiltins() {
   });
 }
 
+/**
+ * 内置题库的确定性文档 ID。
+ * 页面重复进入会并发触发两条自动导入链路，两条都查不到对方刚建的题库，
+ * 于是各建一份，出现两套同名题库。用确定性 ID 后并发也只是写同一个文档。
+ */
+function builtinBankDocId(openid, builtinId) {
+  return "bk-" + crypto.createHash("sha1").update(openid + "|" + builtinId).digest("hex").slice(0, 24);
+}
+
 async function addBuiltin(id, openid) {
   const builtin = BUILTIN_BANKS.find(function (item) { return item.id === id; });
   if (!builtin) throw bizError("未找到该内置题库");
-  const existing = await db.collection(COLL_BANK).where({ _openid: openid, builtinId: id }).limit(1).get();
+
+  const bankDocId = builtinBankDocId(openid, id);
+  let existingBank = null;
+  try {
+    const fixed = await db.collection(COLL_BANK).doc(bankDocId).get();
+    if (fixed && fixed.data && fixed.data._openid === openid) existingBank = fixed.data;
+  } catch (err) {
+    existingBank = null; // 文档不存在时会抛错，正常
+  }
+  if (!existingBank) {
+    // 兼容改成确定性 ID 之前已建的题库
+    const legacy = await db.collection(COLL_BANK).where({ _openid: openid, builtinId: id }).limit(1).get();
+    existingBank = (legacy.data && legacy.data[0]) || null;
+  }
+  const existing = { data: existingBank ? [existingBank] : [] };
   const sources = builtin.members
     ? builtin.members.map(function (memberId) { return BUILTIN_BANKS.find(function (item) { return item.id === memberId; }); }).filter(Boolean)
     : [builtin];
@@ -484,16 +507,17 @@ async function addBuiltin(id, openid) {
   let progress = 0;
   if (!bankId) {
     const ts = now();
-    const added = await db.collection(COLL_BANK).add({ data: {
+    // 写到确定性 ID：并发导入不会建出第二份
+    await db.collection(COLL_BANK).doc(bankDocId).set({ data: {
       _openid: openid, name: str(builtin.name, 30), desc: str(builtin.desc, 100),
       count: questionCount, typeStat: typeStat, questionIds: questionIds, public: false, builtinId: id,
       builtinProgress: 0, createdAt: ts, updatedAt: ts,
     } });
-    bankId = added._id;
-  } else {
-    const current = await db.collection(COLL_BANK).doc(bankId).get();
-    progress = Number(current.data && current.data.builtinProgress) || 0;
+    bankId = bankDocId;
   }
+  // 建库后统一回读进度：并发写入可能把进度重置，回读保证不会漏导或重导
+  const current = await db.collection(COLL_BANK).doc(bankId).get();
+  progress = Number(current.data && current.data.builtinProgress) || 0;
 
   // 每次调用只导入一个分卷就返回进度，客户端循环续传。
   // 云端函数执行上限实测仍是 3 秒，这里不做时间预算赌注，单卷导入稳定在 1~2 秒内

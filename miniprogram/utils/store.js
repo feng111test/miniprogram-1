@@ -113,11 +113,16 @@ function getBank(id) {
 
 function getBuiltInBanks() { return call("builtins", {}); }
 
-// 首次进入时自动准备的内置题库：用户无需手动添加
-var DEFAULT_BUILTIN_ID = "2026-chemistry-mixed";
-
 var importTasks = {};
 var importListeners = {};
+
+// 默认题库的自动导入在整次会话里只跑一次：
+// 页面被重建（reLaunch / 重新进入）时，旧页面的导入链还在跑，
+// 新页面再起一条就会两边同时写，产生重复题库
+var defaultBanksPrepared = false;
+
+function isDefaultBanksPrepared() { return defaultBanksPrepared; }
+function markDefaultBanksPrepared() { defaultBanksPrepared = true; }
 
 /**
  * 添加内置题库。题库较大时云端会分次导入，这里自动续传到 done。
@@ -278,7 +283,8 @@ function getResult() {
 }
 
 module.exports = {
-  DEFAULT_BUILTIN_ID: DEFAULT_BUILTIN_ID,
+  isDefaultBanksPrepared: isDefaultBanksPrepared,
+  markDefaultBanksPrepared: markDefaultBanksPrepared,
   getBanks: getBanks,
   getBank: getBank,
   getBuiltInBanks: getBuiltInBanks,

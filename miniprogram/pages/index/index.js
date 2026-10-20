@@ -62,7 +62,7 @@ Page(shareUtil.withShare({
           b.percent = b.count ? Math.round((b.answered / b.count) * 100) : 0;
           b.timeText = formatDate(b.updatedAt);
           b.ownerText = b.mine ? "我的" : "共享";
-          b.isDefault = b.builtinId === store.DEFAULT_BUILTIN_ID;
+          b.isDefault = !!b.builtinId;
           return b;
         });
         self.setData({
@@ -71,7 +71,7 @@ Page(shareUtil.withShare({
           loading: false,
           cloudError: "",
         });
-        self.prepareDefaultBank(banks);
+        self.prepareDefaultBanks(banks);
       })
       .catch(function (err) {
         self.setData({
@@ -88,33 +88,61 @@ Page(shareUtil.withShare({
   },
 
   /**
-   * 高考化学题库作为默认题库：还没有就后台自动导入，用户不必手动添加。
-   * 导入走云端分卷续传，这里只展示进度，完成后刷新列表。
+   * 高考化学题库全部作为默认题库：缺哪个就后台导入哪个，用户不必手动添加。
+   * 逐个导入（不并发，避免把云端打满），进度展示在顶部横幅，完成后刷新列表。
    */
-  prepareDefaultBank: function (list) {
+  prepareDefaultBanks: function (list) {
     var self = this;
-    if (self._prepareTried) return;
-    for (var i = 0; i < (list || []).length; i++) {
-      if (list[i].builtinId === store.DEFAULT_BUILTIN_ID) return;
-    }
-    self._prepareTried = true;
-    self.setData({ preparing: { progress: 0, total: 0, percent: 0 } });
+    if (store.isDefaultBanksPrepared()) return;
+    store.markDefaultBanksPrepared();
 
-    store.addBuiltInBank(store.DEFAULT_BUILTIN_ID, function (res) {
-      var total = res.total || 0;
-      var progress = res.progress || 0;
-      self.setData({
-        preparing: { progress: progress, total: total, percent: total ? Math.round((progress / total) * 100) : 0 },
-      });
-    }).then(function () {
-      self.setData({ preparing: null });
-      wx.showToast({ title: "高考化学题库已就绪", icon: "success" });
-      return self.refresh();
-    }).catch(function (err) {
-      console.error("[默认题库] 自动导入失败", err);
-      self.setData({ preparing: null });
-      wx.showToast({ title: ("内置题库导入失败：" + ((err && err.message) || "请稍后重试")), icon: "none" });
+    var owned = {};
+    (list || []).forEach(function (bank) {
+      if (bank.builtinId) owned[bank.builtinId] = true;
     });
+
+    return store
+      .getBuiltInBanks()
+      .then(function (builtins) {
+        var pending = (builtins || []).filter(function (bank) { return !owned[bank.id]; });
+        if (!pending.length) return null;
+
+        var total = pending.length;
+        console.log("[默认题库] 待导入 =", total, "个");
+        var chain = Promise.resolve();
+
+        pending.forEach(function (bank, index) {
+          chain = chain.then(function () {
+            self.setData({
+              preparing: { name: bank.name, index: index, total: total, percent: Math.round((index / total) * 100), inner: "" },
+            });
+            return store.addBuiltInBank(bank.id, function (res) {
+              var inner = res && res.total ? (res.progress || 0) / res.total : 0;
+              self.setData({
+                preparing: {
+                  name: bank.name,
+                  index: index,
+                  total: total,
+                  percent: Math.round(((index + inner) / total) * 100),
+                  inner: res && res.total > 1 ? "（" + res.progress + "/" + res.total + " 卷）" : "",
+                },
+              });
+            });
+          });
+        });
+        return chain;
+      })
+      .then(function (imported) {
+        if (!imported) return null;
+        self.setData({ preparing: null });
+        wx.showToast({ title: "高考化学题库已就绪", icon: "success" });
+        return self.refresh();
+      })
+      .catch(function (err) {
+        console.error("[默认题库] 自动导入失败", err);
+        self.setData({ preparing: null });
+        wx.showToast({ title: "内置题库导入失败：" + ((err && err.message) || "请稍后重试"), icon: "none" });
+      });
   },
 
   onShowCloudHelp: function () {
@@ -273,8 +301,8 @@ Page(shareUtil.withShare({
     var meta = this.findMeta(id);
     if (!meta) return;
 
-    // 自动导入的默认题库不提供删除：删掉后下次进入又会自动导回来
-    var isDefault = meta.builtinId === store.DEFAULT_BUILTIN_ID;
+    // 内置（默认）题库不提供删除：删掉后下次进入又会自动导回来
+    var isDefault = !!meta.builtinId;
 
     var items = [];
     if (meta.mine) {
